@@ -12,4 +12,3 @@ features of **Autobahn**|Python:
    * [WAMP](asyncio/wamp)
 
 > Note: old Twisted / WAMP v1 examples are [here](twisted/wamp1)
- 

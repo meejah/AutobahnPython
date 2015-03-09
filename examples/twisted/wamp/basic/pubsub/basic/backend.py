@@ -41,7 +41,7 @@ class Component(ApplicationSession):
         print("session attached")
         counter = 0
         while True:
-            print(".")
+            print('backend publishing "com.myapp.topic1"', )
             self.publish('com.myapp.topic1', counter)
             counter += 1
             yield sleep(1)
@@ -49,5 +49,10 @@ class Component(ApplicationSession):
 
 if __name__ == '__main__':
     from autobahn.twisted.wamp import ApplicationRunner
-    runner = ApplicationRunner("ws://127.0.0.1:8080/ws", "realm1")
+    # to hard-code local infrastructure:
+    # runner = ApplicationRunner("ws://127.0.0.1:8080/ws", "realm1")
+    runner = ApplicationRunner(
+        environ.get("AUTOBAHN_DEMO_URL", "wss://demo.crossbar.io/ws"),
+        "realm1"
+    )
     runner.run(Component)
