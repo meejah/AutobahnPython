@@ -36,7 +36,6 @@ from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
 
 
 class Component(ApplicationSession):
-
     """
     An application component that publishes events with no payload
     and with complex payload every second.

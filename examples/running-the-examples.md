@@ -61,71 +61,31 @@ cd examples/router
 crossbar start
 ```
 
-There should now be a router now listening on `localhost:8080` so you can change the URI in all the demos to `ws://localhost:8080/ws` or set the environment variable `AUTOBAHN_DEMO_ROUTER=ws://localhost:8080/ws` Obviously, this environment variable isn't used by in-browser JavaScript so you'll have to change .js files by hand.
+There should now be a router listening on `localhost:8080` so you can change the URI in all the demos to `ws://localhost:8080/ws` or set the environment variable `AUTOBAHN_DEMO_ROUTER=ws://localhost:8080/ws` Obviously, this environment variable isn't used by in-browser JavaScript so you'll have to change .js files by hand.
 
 If you are running the router successfully, you should see a Crossbar page at `http://localhost:8080/`. We've added enough configuration to serve the HTML, JavaScript and README files from all the examples; you should see a list of links at the page.
 
 
 ## Hosting
 
-Crossbar.io is a WAMP router that can also act as a host for WAMP application components. E.g. to let Crossbar.io host a backend application component, you can use a node configuration like this:
+Crossbar.io is a WAMP router that can also act as a host for WAMP application components. So, for example, to let Crossbar.io host one of the examples as a backend application component, you can add a `"components"` section to `examples/router/.crossbar/config.json` at the same level as `"realms"`:
 
 ```javascript
 
 {
-   "controller": {
-   },
-   "workers": [
-      {
-         "type": "router",
+         ...
          "options": {
-            "pythonpath": ["f:\\scm\\tavendo\\autobahn\\AutobahnPython\\examples\\twisted\\wamp\\basic"]
+             "pythonpath": ["../../twisted/wamp/basic"]
          },
-         "realms": [
-            {
-               "name": "realm1",
-               "roles": [
-                  {
-                     "name": "anonymous",
-                     "permissions": [
-                        {
-                           "uri": "*",
-                           "publish": true,
-                           "subscribe": true,
-                           "call": true,
-                           "register": true
-                        }
-                     ]
-                  }
-               ]
-            }
-         ],
          "components": [
             {
                "type": "class",
                "classname": "pubsub.complex.backend.Component",
-               "realm": "realm1"
+               "realm": "crossbardemo"
             }
          ],
-         "transports": [
-            {
-               "type": "web",
-               "endpoint": {
-                  "type": "tcp",
-                  "port": 8080
-               },
-               "paths": {
-                  "/": {
-                     "type": "static",
-                     "directory": ".."
-                  },
-                  "ws": {
-                     "type": "websocket"
-                  }
-               }
-            }
-         ]
-      }
-   ]
+         ...
 }
 ```
+
+For the above exact configuration to work you'll need the `./examples/twisted/wamp/basic` directory in your CLASSPATH
