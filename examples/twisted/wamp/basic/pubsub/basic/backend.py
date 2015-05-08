@@ -31,7 +31,6 @@ from autobahn.twisted.wamp import ApplicationSession
 
 
 class Component(ApplicationSession):
-
     """
     An application component that publishes an event every second.
     """
@@ -41,7 +40,7 @@ class Component(ApplicationSession):
         print("session attached")
         counter = 0
         while True:
-            print('backend publishing "com.myapp.topic1"', )
+            print('backend publishing "com.myapp.topic1"', counter)
             self.publish('com.myapp.topic1', counter)
             counter += 1
             yield sleep(1)
@@ -49,10 +48,10 @@ class Component(ApplicationSession):
 
 if __name__ == '__main__':
     from autobahn.twisted.wamp import ApplicationRunner
-    # to hard-code local infrastructure:
+    # to hard-code to local infrastructure:
     # runner = ApplicationRunner("ws://127.0.0.1:8080/ws", "realm1")
     runner = ApplicationRunner(
-        environ.get("AUTOBAHN_DEMO_URL", "wss://demo.crossbar.io/ws"),
+        environ.get("AUTOBAHN_DEMO_ROUTER", "wss://demo.crossbar.io/ws"),
         "realm1"
     )
     runner.run(Component)

@@ -31,16 +31,14 @@ from autobahn.twisted.wamp import ApplicationSession
 
 
 class Component(ApplicationSession):
-
     """
-    An application component that subscribes and receives events,
-    and stop after having received 5 events.
+    An application component that subscribes and receives events, and
+    stop after having received 5 events.
     """
 
     @inlineCallbacks
     def onJoin(self, details):
         print("session attached")
-
         self.received = 0
 
         def on_event(i):
@@ -58,5 +56,10 @@ class Component(ApplicationSession):
 
 if __name__ == '__main__':
     from autobahn.twisted.wamp import ApplicationRunner
-    runner = ApplicationRunner("ws://127.0.0.1:8080/ws", "realm1")
+    # to hard-code to local infrastructure:
+    # runner = ApplicationRunner("ws://127.0.0.1:8080/ws", "realm1")
+    runner = ApplicationRunner(
+        environ.get("AUTOBAHN_DEMO_ROUTER", "wss://demo.crossbar.io/ws"),
+        "realm1"
+    )
     runner.run(Component)
