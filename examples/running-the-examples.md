@@ -6,7 +6,7 @@ To run the following examples, you need a WAMP router.
 
 By default, **all examples are set up to use a public demonstration router** at `wss://demo.crossbar.io/ws`.
 
-If you wish to run your own, local, router see :ref:`Running Crossbar Locally` below. This avoids sending Autobahn traffic outside your network.
+If you wish to run your own, local, router see [Running Crossbar Locally] below. This avoids sending Autobahn traffic outside your network.
 
 
 ## Creating a virtualenv
