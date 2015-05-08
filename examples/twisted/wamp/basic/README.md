@@ -60,11 +60,11 @@ To run an example, you can have two (or three) terminal sessions open with:
 You can also run the frontend/backend in the same shell by putting one in the background. This makes tbe examples less clear, however:
 
 ```shell
-python pubsub/basic/frontend.py &
-python pubsub/basic/backend.py
+python twisted/wamp/basic/pubsub/basic/frontend.py &
+python twisted/wamp/basic/pubsub/basic/backend.py
 ```
 
-Some **things to try**: open a new terminal and run a second frontend;  leave the backend running for a while and then run the frontend; disconnect a frontend and reconnect (re-run) it.
+Some **things to try**: open a new terminal and run a second frontend;  leave the backend running for a while and then run the frontend; disconnect a frontend and reconnect (re-run) it; mix and match the examples (e.g. twisted/wamp/basic/pubsub/basic/backend.py with twisted/wamp/basic/pubsub/decorators/frontend.py)
 
 
 ## Running Crossbar Locally

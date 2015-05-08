@@ -10,5 +10,3 @@ features of **Autobahn**|Python:
 2. **asyncio**-based Examples
    * [WebSocket](asyncio/websocket)
    * [WAMP](asyncio/wamp)
-
-> Note: old Twisted / WAMP v1 examples are [here](twisted/wamp1)
