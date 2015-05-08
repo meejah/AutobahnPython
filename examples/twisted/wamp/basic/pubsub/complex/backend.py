@@ -24,12 +24,15 @@
 #
 ###############################################################################
 
+from __future__ import print_function
+
 import random
+from os import environ
 
 from twisted.internet.defer import inlineCallbacks
 
 from autobahn.twisted.util import sleep
-from autobahn.twisted.wamp import ApplicationSession
+from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
 
 
 class Component(ApplicationSession):
@@ -45,10 +48,11 @@ class Component(ApplicationSession):
 
         counter = 0
         while True:
-            print(".")
+            print("publish: com.myapp.heartbeat")
             self.publish('com.myapp.heartbeat')
 
             obj = {'counter': counter, 'foo': [1, 2, 3]}
+            print("publish: com.myapp.topic2", obj)
             self.publish('com.myapp.topic2', random.randint(0, 100), 23, c="Hello", d=obj)
 
             counter += 1
@@ -56,6 +60,10 @@ class Component(ApplicationSession):
 
 
 if __name__ == '__main__':
-    from autobahn.twisted.wamp import ApplicationRunner
-    runner = ApplicationRunner("ws://127.0.0.1:8080/ws", "realm1")
+    runner = ApplicationRunner(
+        environ.get("AUTOBAHN_DEMO_ROUTER", "wss://demo.crossbar.io/ws"),
+        u"crossbardemo",
+        debug_wamp=False,  # optional; log many WAMP details
+        debug=False,  # optional; log even more details
+    )
     runner.run(Component)
