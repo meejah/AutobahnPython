@@ -53,7 +53,8 @@ class Component(ApplicationSession):
 
             obj = {'counter': counter, 'foo': [1, 2, 3]}
             print("publish: com.myapp.topic2", obj)
-            self.publish('com.myapp.topic2', random.randint(0, 100), 23, c="Hello", d=obj)
+            self.publish('com.myapp.topic2', random.randint(0, 100), 23,
+                         c="Hello", d=obj)
 
             counter += 1
             yield sleep(1)

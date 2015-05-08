@@ -51,11 +51,16 @@ class Component(ApplicationSession):
         counter = 0
         while True:
             print("publish: com.myapp.topic1", counter)
+            pub_options = PublishOptions(
+                acknowledge=True,
+                disclose_me=True,
+                exclude_me=False
+            )
             publication = yield self.publish(
                 'com.myapp.topic1', counter,
-                options=PublishOptions(acknowledge=True, disclose_me=True, exclude_me=False)
+                options=pub_options,
             )
-            print("Event published with publication ID {}".format(publication.id))
+            print("Published with publication ID {}".format(publication.id))
             counter += 1
             yield sleep(1)
 

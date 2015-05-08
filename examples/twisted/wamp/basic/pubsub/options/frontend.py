@@ -31,7 +31,6 @@ from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
 
 from autobahn.wamp.types import SubscribeOptions
-from autobahn.twisted.util import sleep
 from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
 
 
@@ -49,7 +48,8 @@ class Component(ApplicationSession):
         self.received = 0
 
         def on_event(i, details=None):
-            print("Got event, publication ID {}, publisher {}: {}".format(details.publication, details.publisher, i))
+            msg = "Got event, publication ID {}, publisher {}: {}"
+            print(msg.format(details.publication, details.publisher, i))
             self.received += 1
             if self.received > 5:
                 self.leave()

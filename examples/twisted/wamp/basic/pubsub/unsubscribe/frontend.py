@@ -30,7 +30,6 @@ from os import environ
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
 
-from autobahn.twisted.util import sleep
 from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
 
 
@@ -44,8 +43,8 @@ class Component(ApplicationSession):
     @inlineCallbacks
     def test(self):
         self.received = 0
-        self.subscription = yield self.subscribe(self.on_event, 'com.myapp.topic1')
-        print("Subscribed with subscription ID {}".format(self.subscription.id))
+        self.sub = yield self.subscribe(self.on_event, 'com.myapp.topic1')
+        print("Subscribed with subscription ID {}".format(self.sub.id))
 
     @inlineCallbacks
     def on_event(self, i):
@@ -56,7 +55,7 @@ class Component(ApplicationSession):
             if self.runs > 1:
                 self.leave()
             else:
-                yield self.subscription.unsubscribe()
+                yield self.sub.unsubscribe()
                 print("Unsubscribed .. continue in 5s ..")
                 reactor.callLater(5, self.test)
 
