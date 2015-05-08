@@ -37,34 +37,34 @@ pip install -e ./
 
 If you wish to run your own, local, router see :ref:`Running Crossbar Locally` below. This avoids sending Autobahn traffic outside your network.
 
+For all the examples, we presume that you are in the `./examples` directory of your autobahn clone, and that the virtualenv in which you've installed Autobahn is activated. If you're running your own Crossbar, it runs from `./examples/router` in its own virtualenv.
+
 The examples usually contain two components:
 
  * frontend
  * backend
 
-Each component is provided in two languages:
+Each component is (usually) provided in two languages:
 
  * Python
  * JavaScript
 
 The JavaScript version can run on the browser or in NodeJS.
 
-To run an example, you can have three terminal sessions open with:
+To run an example, you can have two (or three) terminal sessions open with:
 
- 1. router (e.g. `crossbar` as above)
- 2. frontend
- 3. backend
+ 1. frontend
+ 2. backend
+ 3. the router (e.g. `crossbar`)
 
-E.g. the Python examples can be run, if you're already running the
-above router somehwere:
+You can also run the frontend/backend in the same shell by putting one in the background. This makes tbe examples less clear, however:
 
 ```shell
 python pubsub/basic/frontend.py &
 python pubsub/basic/backend.py
 ```
 
-Try runnnig two frontends, or leaving the backend running for a while
-and then run the frontend.
+Some **things to try**: open a new terminal and run a second frontend;  leave the backend running for a while and then run the frontend; disconnect a frontend and reconnect (re-run) it.
 
 
 ## Running Crossbar Locally
@@ -80,10 +80,12 @@ crossbar init
 crossbar start
 ```
 
-You can look at and change the configuration in `router/.crossbar/config.json`. By default there will be a router now listening on `localhost:8080` so you can change the URI in all the demos to `ws://localhost:8080/ws` or set the environment variable `AUTOBAHN_DEMO_ROUTER=ws://localhost:8080/ws`
+Note that you **must change** the realm in the the configuration in `router/.crossbar/config.json` -- change "realm1" to "crossbardemo". By default there will be a router now listening on `localhost:8080` so you can change the URI in all the demos to `ws://localhost:8080/ws` or set the environment variable `AUTOBAHN_DEMO_ROUTER=ws://localhost:8080/ws` Obviously, this environment variable isn't used by in-browser JavaScript so you'll have to change .js files by hand.
 
 If you are running the router successfully, you should see a Crossbar
 404 page at http://localhost:8080/
+
+The default Crossbar instance will already have a [Static Web Service transport](http://crossbar.io/docs/Static-Web-Service/) set up, but you'll want to change the directory so it can serve the example html and javascript; change `"directory": ".."` to `"directory": "../.."` if you followed the above. Or you can use an absolute path to `.../examples` in your clone of Autobahn. Then, for example, the basic pubsub WAMP example frontend should be at http://localhost:8080/twisted/wamp/basic/pubsub/basic/frontend.html
 
 
 ## Hosting
