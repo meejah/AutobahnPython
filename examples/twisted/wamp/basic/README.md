@@ -21,9 +21,12 @@
 
 ## How to run
 
-To run the following examples, you need a WAMP router. By default,
-they are using the public router `wss://demo.crossbar.io/ws` If you do
-not yet have a `virtualenv`, you can do something like:
+To run the following examples, you need a WAMP router.
+
+By default, **all examples are set up to use a public demonstration router** at `wss://demo.crossbar.io/ws`.
+
+If you do not yet have a `virtualenv` to run the examples with, you
+can do something like:
 
 ```shell
 cd ./autobahn-clone/
@@ -32,24 +35,7 @@ source venv-autobahn/bin/activate
 pip install -e ./
 ```
 
-If you would prefer not to generate traffic outside your network, you
-should run your own WAMP Router, such as [Crossbar.io](http://crossbar.io):
-
-```shell
-pip install crossbar
-mkdir /tmp/demo-router
-cd /tmp/demo-router/
-crossbar init
-crossbar start
-```
-
-You will then need to change instances of `wss://demo.crossbar.io/ws`
-to your URL (by default, if you ran the above, this will be
-`ws://localhost:8080/ws`) *OR* set the environment variable
-`AUTOBAHN_DEMO_URL=ws://localhost:8080/ws`
-
-If running the router was successful, you should see a Crossbar 404
-page at http://localhost:8080/
+If you wish to run your own, local, router see :ref:`Running Crossbar Locally` below. This avoids sending Autobahn traffic outside your network.
 
 The examples usually contain two components:
 
@@ -79,6 +65,25 @@ python pubsub/basic/backend.py
 
 Try runnnig two frontends, or leaving the backend running for a while
 and then run the frontend.
+
+
+## Running Crossbar Locally
+
+If you want to use your own local [Crossbar](http://crossbar.io) instance you must have a Python2-based virtualenv and `pip install crossbar`. See also [crossbar.io's platform-specific installation instructions](http://crossbar.io/docs/Local-Installation/).
+
+Once you have crossbar installed, create a directory for your crossbar configuration and logs. For example::
+
+```shell
+mkdir router
+cd router
+crossbar init
+crossbar start
+```
+
+You can look at and change the configuration in `router/.crossbar/config.json`. By default there will be a router now listening on `localhost:8080` so you can change the URI in all the demos to `ws://localhost:8080/ws` or set the environment variable `AUTOBAHN_DEMO_ROUTER=ws://localhost:8080/ws`
+
+If running the router was successful, you should see a Crossbar 404
+page at http://localhost:8080/
 
 
 ## Hosting
