@@ -69,7 +69,7 @@ and then run the frontend.
 
 ## Running Crossbar Locally
 
-If you want to use your own local [Crossbar](http://crossbar.io) instance you must have a Python2-based virtualenv and `pip install crossbar`. See also [crossbar.io's platform-specific installation instructions](http://crossbar.io/docs/Local-Installation/).
+If you want to use your own local [Crossbar](http://crossbar.io) instance you must have a Python2-based virtualenv and `pip install crossbar` in it. See also [crossbar.io's platform-specific installation instructions](http://crossbar.io/docs/Local-Installation/) as you may need to install some native libraries as well.
 
 Once you have crossbar installed, create a directory for your crossbar configuration and logs. For example::
 
@@ -82,8 +82,8 @@ crossbar start
 
 You can look at and change the configuration in `router/.crossbar/config.json`. By default there will be a router now listening on `localhost:8080` so you can change the URI in all the demos to `ws://localhost:8080/ws` or set the environment variable `AUTOBAHN_DEMO_ROUTER=ws://localhost:8080/ws`
 
-If running the router was successful, you should see a Crossbar 404
-page at http://localhost:8080/
+If you are running the router successfully, you should see a Crossbar
+404 page at http://localhost:8080/
 
 
 ## Hosting
