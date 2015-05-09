@@ -88,4 +88,4 @@ Crossbar.io is a WAMP router that can also act as a host for WAMP application co
 }
 ```
 
-For the above exact configuration to work you'll need the `./examples/twisted/wamp/basic` directory in your CLASSPATH
+For the above exact configuration to work you'll need the `./examples/twisted/wamp/basic` directory in your PYTHONPATH (that configuration is provided in the `"options"` above).
