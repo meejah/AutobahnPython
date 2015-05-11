@@ -1055,7 +1055,6 @@ class ApplicationSession(BaseSession):
             return on_reply
 
         if callable(handler):
-
             # subscribe a single handler
             return _subscribe(None, handler, topic, options)
 
