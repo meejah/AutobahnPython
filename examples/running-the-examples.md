@@ -6,7 +6,7 @@ To run the following examples, you need a WAMP router.
 
 By default, **all examples are set up to use a public demonstration router** at `wss://demo.crossbar.io/ws`.
 
-If you wish to run your own, local, router see [Running Crossbar Locally] below. This avoids sending Autobahn traffic outside your network.
+If you wish to run your own, local, router see [Running Crossbar Locally] below. Doing so avoids sending Autobahn traffic outside your network.
 
 
 ## Creating a virtualenv
@@ -14,7 +14,7 @@ If you wish to run your own, local, router see [Running Crossbar Locally] below.
 If you do not yet have a `virtualenv` to run the examples with, you can do something like:
 
 ```shell
-cd ./autobahn-clone/
+cd path/to/autobahn-clone/
 virtualenv venv-autobahn
 source venv-autobahn/bin/activate
 pip install -e ./
@@ -22,17 +22,9 @@ pip install -e ./
 
 For all the examples, we presume that you are in the `./examples` directory of your autobahn clone, and that the virtualenv in which you've installed Autobahn is activated. If you're running your own Crossbar, it runs from `./examples/router` in its own virtualenv.
 
-The examples usually contain two components:
-
- * frontend
- * backend
-
-Each component is (usually) provided in two languages:
-
- * Python
- * JavaScript
-
-The JavaScript version can run on the browser or in NodeJS.
+The examples usually contain two components, `frontend` and `backend`.
+Each component is (usually) provided in two languages, Python and
+Javascript.
 
 To run an example, you can have two (or three) terminal sessions open with:
 
