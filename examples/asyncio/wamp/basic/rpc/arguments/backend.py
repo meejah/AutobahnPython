@@ -56,3 +56,4 @@ class Component(ApplicationSession):
         self.register(stars, u'com.arguments.stars')
         self.register(orders, u'com.arguments.orders')
         self.register(arglen, u'com.arguments.arglen')
+        print("Registered methods; ready for frontend.")
