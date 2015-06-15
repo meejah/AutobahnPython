@@ -110,9 +110,7 @@ class WampRawSocketProtocol(Int32StringReceiver):
             self._session.onClose(wasClean)
             self.is_closed.callback(None)
         except Exception as e:
-            # silently ignore exceptions raised here ..
-            if self.factory.debug:
-                log.msg("WampRawSocketProtocol: ApplicationSession.onClose raised ({0})".format(e))
+            log.msg("WampRawSocketProtocol: ApplicationSession.onClose raised ({0})".format(e))
         self._session = None
 
     def stringReceived(self, payload):
