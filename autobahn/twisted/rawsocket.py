@@ -31,6 +31,7 @@ import binascii
 from twisted.internet.protocol import Factory
 from twisted.protocols.basic import Int32StringReceiver
 from twisted.internet.error import ConnectionDone
+from twisted.logger import Logger
 
 from autobahn.twisted.util import peer2str
 from autobahn.wamp.exception import ProtocolError, SerializationError, TransportLost
@@ -95,10 +96,12 @@ class WampRawSocketProtocol(Int32StringReceiver):
         try:
             self._session = self.factory._factory()
             self._session.onOpen(self)
-        except Exception as e:
+        except Exception:
             # Exceptions raised in onOpen are fatal ..
-            if self.factory.debug:
-                self.log.info("WampRawSocketProtocol: ApplicationSession constructor / onOpen raised ({0})".format(e))
+            self.log.critical(
+                "onOpen failed: {traceback}",
+                traceback=txaio.failure_format_traceback(txaio.create_failure()),
+            )
             self.abort()
         else:
             if self.factory.debug:
@@ -107,15 +110,18 @@ class WampRawSocketProtocol(Int32StringReceiver):
     def connectionLost(self, reason):
         if self.factory.debug:
             self.log.info("WampRawSocketProtocol: connection lost: reason = '{0}'".format(reason))
+
+        was_clean = isinstance(reason.value, ConnectionDone)
         try:
-            wasClean = isinstance(reason.value, ConnectionDone)
-            self._session.onClose(wasClean)
-            self.is_closed.callback(None)
-        except Exception as e:
-            # silently ignore exceptions raised here ..
-            if self.factory.debug:
-                self.log.info("WampRawSocketProtocol: ApplicationSession.onClose raised ({0})".format(e))
+            if self._session is not None:
+                self._session.onClose(was_clean)
+        except Exception:
+            self.log.critical(
+                "onClose failed: {traceback}",
+                traceback=txaio.failure_format_traceback(txaio.create_failure()),
+            )
         self._session = None
+        self.is_closed.callback(None)
 
     def stringReceived(self, payload):
         if self.factory.debug:
@@ -127,9 +133,7 @@ class WampRawSocketProtocol(Int32StringReceiver):
                 self._session.onMessage(msg)
 
         except ProtocolError as e:
-            self.log.info(str(e))
-            if self.factory.debug:
-                self.log.info("WampRawSocketProtocol: WAMP Protocol Error ({0}) - aborting connection".format(e))
+            self.log.error("Protocol error: {err}", err=str(e))
             self.abort()
 
         except Exception as e:
@@ -191,7 +195,6 @@ class WampRawSocketServerProtocol(WampRawSocketProtocol):
     """
 
     def dataReceived(self, data):
-
         if self._handshake_complete:
             WampRawSocketProtocol.dataReceived(self, data)
         else:

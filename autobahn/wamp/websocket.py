@@ -33,6 +33,7 @@ from autobahn.websocket.types import ConnectionDeny
 from autobahn.wamp.interfaces import ITransport
 from autobahn.wamp.exception import ProtocolError, SerializationError, TransportLost
 
+
 __all__ = ('WampWebSocketServerProtocol',
            'WampWebSocketClientProtocol',
            'WampWebSocketServerFactory',
@@ -80,8 +81,7 @@ class WampWebSocketProtocol(object):
                     print("WAMP-over-WebSocket transport lost: wasClean = {0}, code = {1}, reason = '{2}'".format(wasClean, code, reason))
                 self._session.onClose(wasClean)
             except Exception:
-                print("Error invoking onClose():")
-                traceback.print_exc()
+                self.logger.failure("While calling onClose()")
             self._session = None
 
     def onMessage(self, payload, isBinary):
@@ -95,9 +95,7 @@ class WampWebSocketProtocol(object):
                 self._session.onMessage(msg)
 
         except ProtocolError as e:
-            print(e)
-            if self.factory.debug_wamp:
-                traceback.print_exc()
+            self.logger.failure("While calling onMessage")
             reason = "WAMP Protocol Error ({0})".format(e)
             self._bailout(protocol.WebSocketProtocol.CLOSE_STATUS_CODE_PROTOCOL_ERROR, reason=reason)
 
