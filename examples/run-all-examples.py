@@ -2,10 +2,17 @@
 
 from __future__ import print_function
 
-# this is mostly for testing that the examples still run without errors
+# this is mostly for testing that the examples run without errors
 #
-# the individual "run.sh" scripts called by each of these serve as
-# developer-documentation as to how to run the example.
+# To use this script:
+#
+#  0. change to this directory
+#  1. be in an activated Python2 virtual-env with crossbar installed
+#  2. have a virtualenv called ./venv-py3 using a Python3
+#     interpreter with crossbar (or just Autobahn) installed.
+#
+# ...then just run this script; it colors the output and runs each
+# frontend/backend pair for a few seconds.
 
 import sys
 from os import environ
