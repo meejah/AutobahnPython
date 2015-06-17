@@ -101,17 +101,16 @@ def start_crossbar():
 
 
 @inlineCallbacks
-def start_example(py_fname, color, prefix=''):
+def start_example(py_fname, color, prefix='', exe=sys.executable):
     finished = Deferred()
     launched = Deferred()
     protocol = CrossbarProcessProtocol(finished, launched, color, prefix)
-    args = [sys.executable, py_fname]
+    args = [exe, py_fname]
 
     env = environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
 
-    transport = reactor.spawnProcess(
-        protocol, sys.executable, args, path='.', env=env)
+    transport = reactor.spawnProcess(protocol, exe, args, path='.', env=env)
 
     yield launched
     returnValue(protocol)
@@ -145,6 +144,23 @@ def main(reactor):
         './twisted/wamp/rpc/decorators/',
         './twisted/wamp/rpc/complex/',
         './twisted/wamp/rpc/arguments/',
+
+        'py3 ./asyncio/wamp/basic/pubsub/unsubscribe/',
+        'py3 ./asyncio/wamp/basic/pubsub/tls/',
+        'py3 ./asyncio/wamp/basic/pubsub/options/',
+        'py3 ./asyncio/wamp/basic/pubsub/decorators/',
+        'py3 ./asyncio/wamp/basic/pubsub/complex/',
+        'py3 ./asyncio/wamp/basic/pubsub/sic/',
+
+        'py3 ./asyncio/wamp/basic/rpc/timeservice/',
+        'py3 ./asyncio/wamp/basic/rpc/slowsquare/',
+        'py3 ./asyncio/wamp/basic/rpc/progress/',
+        'py3 ./asyncio/wamp/basic/rpc/options/',
+        'py3 ./asyncio/wamp/basic/rpc/errors/',
+        'py3 ./asyncio/wamp/basic/rpc/decorators/',
+        'py3 ./asyncio/wamp/basic/rpc/complex/',
+        'py3 ./asyncio/wamp/basic/rpc/arguments/',
+
     ]
 
     print_banner("Running crossbar.io instance")
@@ -155,6 +171,10 @@ def main(reactor):
 
     success = True
     for exdir in examples:
+        py = sys.executable
+        if exdir.startswith('py3 '):
+            exdir = exdir[4:]
+            py = './venv-py3/bin/python'
         frontend = join(exdir, 'frontend.py')
         backend = join(exdir, 'backend.py')
         if not exists(frontend) or not exists(backend):
@@ -162,9 +182,11 @@ def main(reactor):
             continue
 
         print_banner("Running example: " + exdir)
-        back_proto = yield start_example(backend, Fore.BLUE, ' backend: ')
+        print("  starting backend")
+        back_proto = yield start_example(backend, Fore.BLUE, ' backend: ', exe=py)
         yield sleep(1)
-        front_proto = yield start_example(frontend, Fore.YELLOW, 'frontend: ')
+        print("  starting frontend")
+        front_proto = yield start_example(frontend, Fore.YELLOW, 'frontend: ', exe=py)
         yield sleep(3)
 
         for p in [back_proto, front_proto]:
@@ -192,6 +214,9 @@ def main(reactor):
     except:
         pass
     if success:
+        print()
+        print("Success!")
+        print("  ...all the examples neither crashed nor burned...")
         returnValue(0)
     returnValue(5)
 
