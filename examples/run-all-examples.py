@@ -204,11 +204,11 @@ def main(reactor):
                 print("FAILED:", e)
                 success = False
 
-        try:
-            front_proto.transport.signalProcess('KILL')
-            back_proto.transport.signalProcess('KILL')
-        except ProcessExitedAlready:
-            pass
+        for p in [front_proto, back_proto]:
+            try:
+                p.transport.signalProcess('KILL')
+            except ProcessExitedAlready:
+                pass
 
         if not success:
             break
