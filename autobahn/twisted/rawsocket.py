@@ -44,12 +44,16 @@ __all__ = (
     'WampRawSocketClientFactory'
 )
 
-
+import txaio
 class WampRawSocketProtocol(Int32StringReceiver):
     """
     Base class for Twisted-based WAMP-over-RawSocket protocols.
     """
     log = txaio.make_logger()
+
+    def __init__(self):
+        #: a Future/Deferred that fires when we hit STATE_CLOSED
+        self.is_closed = txaio.create_future()
 
     def connectionMade(self):
         if self.factory.debug:
@@ -106,6 +110,7 @@ class WampRawSocketProtocol(Int32StringReceiver):
         try:
             wasClean = isinstance(reason.value, ConnectionDone)
             self._session.onClose(wasClean)
+            self.is_closed.callback(None)
         except Exception as e:
             # silently ignore exceptions raised here ..
             if self.factory.debug:
