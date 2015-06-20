@@ -107,7 +107,8 @@ class WampRawSocketProtocol(Int32StringReceiver):
             log.msg("WampRawSocketProtocol: connection lost: reason = '{0}'".format(reason))
         try:
             wasClean = isinstance(reason.value, ConnectionDone)
-            self._session.onClose(wasClean)
+            if self._session is not None:
+                self._session.onClose(wasClean)
             self.is_closed.callback(None)
         except Exception as e:
             log.msg("WampRawSocketProtocol: ApplicationSession.onClose raised ({0})".format(e))
