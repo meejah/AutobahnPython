@@ -36,6 +36,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from autobahn.wamp import protocol
 from autobahn.wamp.types import ComponentConfig
 from autobahn.websocket.protocol import parseWsUrl
+from autobahn.twisted.util import sleep
 from autobahn.twisted.websocket import WampWebSocketClientFactory
 from autobahn.twisted.rawsocket import WampRawSocketClientFactory
 from autobahn.wamp import transport
@@ -227,8 +228,9 @@ class Connection(object):
         self._realm = realm
         self._extra = extra
 
-        self._protocol = None
-        self._session = None
+        # state, also API
+        self.protocol = None
+        self.session = None
 
         self._event_listeners = {
             self.ERROR: [],
@@ -289,14 +291,14 @@ class Connection(object):
         # own error-handler ...
 
     def _create_session(self, cfg):
-        self._session = self._session_factory(cfg)
+        self.session = self._session_factory(cfg)
         # should "listen" for onLeave
-        print("SESSION", self._session)
-        return self._session
+        self._fire_event(self.CREATE_SESSION)
+        return self.session
 
     def __str__(self):
         return "<Connection session={} protocol={}>".format(
-            self._session.__class__.__name__, self._protocol.__class__.__name__)
+            self.session.__class__.__name__, self.protocol.__class__.__name__)
 
 
 class ApplicationRunner(object):
