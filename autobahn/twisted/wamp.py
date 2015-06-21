@@ -195,7 +195,108 @@ def connect_to(reactor, transport_config, session_factory, realm, extra, on_erro
             return proto._session.leave()
     reactor.addSystemEventTrigger('before', 'shutdown', cleanup)
 
-    return  # returnValue(proto)
+    returnValue(proto)
+
+
+class Connection(object):
+    """
+    This represents configuration of a protocol and transport to make
+    a WAMP connection to particular endpoints.
+
+     - a WAMP protocol is "websocket" or "rawsocket"
+     - the transport is TCP4, TCP6 (with or without TLS) or Unix socket.
+
+    This handles the lifecycles of the underlying transport/protocol
+    pair, providing notifications of transitions and deals with
+    reconnecting (if configured).
+    """
+
+    """
+    Quick `WAMP lifecycle <FIXME>`_ summary: transports live longer
+    than WAMP Sessions (which in fact can be created several times
+    without taking down the transport, if you want). If the transport
+    goes away, any WAMP Session is ended. The WAMP Session can leave()
+    and then join() again without the transport closing.
+    """
+
+    ERROR = object()
+
+    def __init__(self, session_factory, transports, realm, extra):
+        # self._runner = runner
+        self._session_factory = session_factory
+        self._realm = realm
+        self._extra = extra
+
+        self._protocol = None
+        self._session = None
+
+        self._event_listeners = {
+            self.ERROR: [],
+        }
+
+        def transport_gen():
+            while True:
+                for tr in transports:
+                    yield tr
+        self._transport_gen = transport_gen()
+
+    def add_event(self, event_type, cb):
+        """
+        Add a listener for the given ``event_type``; the callback ``cb``
+        is a zero-argument callable.
+        XXX maybe callback with "self"?
+        XXX maybe args-per-event? like ERROR gets the Failure?
+
+        Valid events are:
+
+         - ``ERROR``: called whenever a connect() attempt fails
+         - etc. probably: transport up/down/failed, session up/down (failed?)
+
+        """
+        try:
+            self._event_listeners[event_type].append(cb)
+        except KeyError:
+            raise ValueError("Unknown event-type '{}'".format(event_type))
+
+    def remove_event(self, event_type, cb):
+        """
+        Stop listening.
+        """
+        try:
+            self._event_listeners[event_type].remove(cb)
+        except ValueError:
+            msg = "Callback '{}' not found for event '{}'"
+            raise ValueError(msg.format(cb, event_type))
+        except KeyError:
+            msg = "No listeners for event '{}'"
+            raise ValueError(msg.format(event_type))
+
+    @inlineCallbacks
+    def connect(self, reactor):
+        """
+        Starts connecting (possibly also re-connecting) and returns a
+        Deferred that fires (with None) when we first connect.
+        """
+        # XXX for now, all we look at is the first transport! ...
+        self._protocol = yield connect_to(
+            reactor,
+            next(self._transport_gen),
+            self._create_session,
+            self._realm,
+            self._extra,
+        )
+        # should "listen" for connectionLost ... etc. and also add our
+        # own error-handler ...
+
+    def _create_session(self, cfg):
+        self._session = self._session_factory(cfg)
+        # should "listen" for onLeave
+        print("SESSION", self._session)
+        return self._session
+
+    def __str__(self):
+        return "<Connection session={} protocol={}>".format(
+            self._session.__class__.__name__, self._protocol.__class__.__name__)
 
 
 class ApplicationRunner(object):
@@ -253,6 +354,7 @@ class ApplicationRunner(object):
             your distribution's CA certificates.
         :type ssl: :class:`twisted.internet.ssl.CertificateOptions`
         """
+
         self.realm = realm
         self.extra = extra or dict()
         self.debug = debug
@@ -260,9 +362,11 @@ class ApplicationRunner(object):
         self.debug_app = debug_app
         self.make = None
         self.ssl = ssl
-        if type(transports) is StringType:
+        self._protocol = None
+        self._session = None
+        if type(url_or_transports) is StringType:
             # XXX emit deprecation-warning? is it really deprecated?
-            isSecure, host, port, resource, path, params = parseWsUrl(transports)
+            isSecure, host, port, resource, path, params = parseWsUrl(url_or_transports)
             self.transports = [{
                 "type": "websocket",
                 "url": transports,
@@ -273,7 +377,7 @@ class ApplicationRunner(object):
                 }
             }]
         else:
-            self.transports = transports
+            self.transports = url_or_transports
 
         # validate the transports we have
         for cfg in self.transports:
@@ -306,29 +410,23 @@ class ApplicationRunner(object):
         txaio.use_twisted()
         txaio.config.loop = reactor
 
+
         # start logging to console
         if True or self.debug or self.debug_wamp or self.debug_app:
             log.startLogging(sys.stdout)
 
-        # XXX in future, retry-logic goes 'over top' of the transport-configs.
-        # XXX should consider "transports" as an iterable, not just list
+
+        self.connection = Connection(
+            session_factory,
+            self.transports,
+            self.realm,
+            self.extra,
+        )
 
         def on_error(e):
             if start_reactor:
                 reactor.stop()
-
-        # this is a method in case we need to do it in callWhenRunning
-        # or not, depending on "start_reactor="
-        def start_transport():
-            # XXX for now, all we look at is the first transport! ...
-            return connect_to(
-                reactor,
-                self.transports[0],
-                session_factory,
-                self.realm,
-                self.extra,
-                on_error,
-            )
+        self.connection.add_event(Connection.ERROR, on_error)
 
         # if the user didn't ask us to start the reactor, then they
         # get to deal with any connect errors themselves.
@@ -348,7 +446,7 @@ class ApplicationRunner(object):
             connect_error = ErrorCollector()
 
             def startup():
-                d = start_transport()
+                d = self.connection.connect(reactor)
                 d.addErrback(connect_error)
             reactor.callWhenRunning(startup)
 
@@ -362,7 +460,9 @@ class ApplicationRunner(object):
 
         else:
             # let the caller handle any errors
-            d = start_transport()
+            d = self.connection.connect(reactor)
+            # we return a Connection instance (_ will be IProtocol)
+            d.addCallback(lambda _: self.connection)
             return d
 
 
