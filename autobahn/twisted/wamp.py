@@ -36,6 +36,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from autobahn.wamp import protocol
 from autobahn.wamp.types import ComponentConfig
 from autobahn.websocket.protocol import parseWsUrl
+from autobahn.twisted.util import sleep
 from autobahn.twisted.websocket import WampWebSocketClientFactory
 from autobahn.twisted.rawsocket import WampRawSocketClientFactory
 from autobahn.wamp import transport
@@ -220,6 +221,7 @@ def _create_retry_scheduler(cfg):
             delay = min(delay, max_delay)
     return retry_schedule
 
+
 class Connection(object):
     """
     This represents configuration of a protocol and transport to make
@@ -270,9 +272,9 @@ class Connection(object):
             self._retry_scheduler = _create_retry_scheduler(retry)
             self._retry = self._retry_scheduler()
 
-        # internal state
-        self._protocol = None
-        self._session = None
+        # state, also API
+        self.protocol = None
+        self.session = None
 
         self._event_listeners = {
             self.ERROR: [],
@@ -325,31 +327,35 @@ class Connection(object):
         Deferred that fires (with None) when we first connect.
         """
 
-        try:
-            self._protocol = yield connect_to(
-                reactor,
-                next(self._transport_gen),
-                self._create_session,
-                self._realm,
-                self._extra,
-            )
-            # we connected, so maybe reset retry schedule
-            if self._retry:
-                self._retry = self._retry_scheduler()
+        while True:
+            try:
+                self.protocol = yield connect_to(
+                    reactor,
+                    next(self._transport_gen),
+                    self._create_session,
+                    self._realm,
+                    self._extra,
+                )
+                # we connected, so maybe reset retry schedule
+                if self._retry:
+                    self._retry = self._retry_scheduler()
 
-        except Exception as e:
-            if self._retry:
-                try:
-                    delay = next(self._retry)
-                    print("retrying in {}s".format(delay))
-                    reactor.callLater(delay, self.connect, reactor)
-                    return
+            except Exception as e:
+                if self._retry:
+                    try:
+                        delay = next(self._retry)
+                        print("retrying in {}s".format(delay))
+                        yield sleep(delay)
+#                        reactor.callLater(delay, self.connect, reactor)
+#                        return
 
-                except StopIteration:
-                    print("Ran out of retry attempts")
+                    except StopIteration:
+                        print("Ran out of retry attempts")
+                        raise RuntimeError("Failed to connect.")
 
-            else:
-                print("Error connecting:", e)
+                else:
+                    print("Error connecting:", e)
+                    break
 
         # if we retried, there was an early return
         self._fire_event(self.ERROR)
@@ -362,15 +368,14 @@ class Connection(object):
             cb()
 
     def _create_session(self, cfg):
-        self._session = self._session_factory(cfg)
+        self.session = self._session_factory(cfg)
         # should "listen" for onLeave
-        print("SESSION", self._session)
         self._fire_event(self.CREATE_SESSION)
-        return self._session
+        return self.session
 
     def __str__(self):
         return "<Connection session={} protocol={}>".format(
-            self._session.__class__.__name__, self._protocol.__class__.__name__)
+            self.session.__class__.__name__, self.protocol.__class__.__name__)
 
 
 class ApplicationRunner(object):
@@ -504,7 +509,7 @@ class ApplicationRunner(object):
             if start_reactor:
                 reactor.stop()
         self.connection.add_event(Connection.ERROR, on_error)
-        self.connection.add_event(Connection.CREATE_SESSION, lambda: print("session!", self.connection._session))
+        self.connection.add_event(Connection.CREATE_SESSION, lambda: print("session!", self.connection.session))
 
         # if the user didn't ask us to start the reactor, then they
         # get to deal with any connect errors themselves.
