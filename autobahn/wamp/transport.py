@@ -26,6 +26,17 @@
 
 from __future__ import absolute_import
 
+def check_retry(cfg):
+    """
+    Checks that the given configuration is a valid retry-logic configuration.
+
+    :param cfg: A dict containing keys:
+
+    - ``max_retries``: maximum attempts before giving up
+    """
+    # XXX FIXME
+    return True
+
 def check_transport(transport, listen=False):
     """
     :param listen: True if this transport will be used for listening

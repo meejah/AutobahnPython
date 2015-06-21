@@ -198,6 +198,28 @@ def connect_to(reactor, transport_config, session_factory, realm, extra, on_erro
     returnValue(proto)
 
 
+def _create_retry_scheduler(cfg):
+    """
+    internal helper
+
+    This returns a generator-function that, when called, will produce
+    a new generator which yields subsequent delays for retries.
+    """
+
+    transport.check_retry(cfg)
+
+    def retry_schedule():
+        delay = cfg.get("initial_retry_delay", 1.5)
+        max_retries = cfg.get("max_retries", 15)
+        max_delay = cfg.get("max_retry_delay", 300)
+        rate = cfg.get("retry_growth_rate", 1.5)
+        # retry_delay_jitter
+        for retry in range(max_retries):
+            yield delay
+            delay *= rate
+            delay = min(delay, max_delay)
+    return retry_schedule
+
 class Connection(object):
     """
     This represents configuration of a protocol and transport to make
@@ -220,20 +242,45 @@ class Connection(object):
     """
 
     ERROR = object()
+    CREATE_SESSION = object()
 
-    def __init__(self, session_factory, transports, realm, extra):
-        # self._runner = runner
+    def __init__(self, session_factory, transports, realm, extra, retry):
+        """
+        :param session_factory: callable that takes a ComponentConfig and
+        returns a new ApplicationSession subclass
+
+        :param transports: a list of dicts configuring available transports
+
+        :param realm: the realm to join
+        :type realm: unicode
+
+        :param extra: an object available as 'self.config.extra' in
+        your ApplicationSession subclass. Can be anything, e.g dict().
+
+        :param retry: either False or a dict configurating retry logic
+        """
+
         self._session_factory = session_factory
         self._realm = realm
         self._extra = extra
+        # retry logic
+        self._retry = None
+        self._retry_scheduler = lambda: None
+        if retry is not None:
+            self._retry_scheduler = _create_retry_scheduler(retry)
+            self._retry = self._retry_scheduler()
 
+        # internal state
         self._protocol = None
         self._session = None
 
         self._event_listeners = {
             self.ERROR: [],
+            self.CREATE_SESSION: [],
         }
 
+        # we just always loop over the transports when trying another
+        # one
         def transport_gen():
             while True:
                 for tr in transports:
@@ -277,21 +324,48 @@ class Connection(object):
         Starts connecting (possibly also re-connecting) and returns a
         Deferred that fires (with None) when we first connect.
         """
-        # XXX for now, all we look at is the first transport! ...
-        self._protocol = yield connect_to(
-            reactor,
-            next(self._transport_gen),
-            self._create_session,
-            self._realm,
-            self._extra,
-        )
+
+        try:
+            self._protocol = yield connect_to(
+                reactor,
+                next(self._transport_gen),
+                self._create_session,
+                self._realm,
+                self._extra,
+            )
+            # we connected, so maybe reset retry schedule
+            if self._retry:
+                self._retry = self._retry_scheduler()
+
+        except Exception as e:
+            if self._retry:
+                try:
+                    delay = next(self._retry)
+                    print("retrying in {}s".format(delay))
+                    reactor.callLater(delay, self.connect, reactor)
+                    return
+
+                except StopIteration:
+                    print("Ran out of retry attempts")
+
+            else:
+                print("Error connecting:", e)
+
+        # if we retried, there was an early return
+        self._fire_event(self.ERROR)
+
         # should "listen" for connectionLost ... etc. and also add our
         # own error-handler ...
+
+    def _fire_event(self, evt):
+        for cb in self._event_listeners[evt]:
+            cb()
 
     def _create_session(self, cfg):
         self._session = self._session_factory(cfg)
         # should "listen" for onLeave
         print("SESSION", self._session)
+        self._fire_event(self.CREATE_SESSION)
         return self._session
 
     def __str__(self):
@@ -384,7 +458,7 @@ class ApplicationRunner(object):
             transport.check_transport(cfg, listen=False)
             cfg['endpoint']['ssl'] = ssl  # HACK FIXME
 
-    def run(self, session_factory, start_reactor=True):
+    def run(self, session_factory, start_reactor=True, retry=None):
         """
         Run an application component.
 
@@ -400,6 +474,8 @@ class ApplicationRunner(object):
            stops. If there are any problems starting the reactor or
            connect()-ing, we stop the reactor and raise the exception
            back to the caller.
+
+        :param retry: dict configuring retry behaviour, or None/False
 
         :returns: None is returned, unless you specify
             ``start_reactor=False`` in which case you get a Deferred
@@ -421,12 +497,14 @@ class ApplicationRunner(object):
             self.transports,
             self.realm,
             self.extra,
+            retry
         )
 
-        def on_error(e):
+        def on_error():
             if start_reactor:
                 reactor.stop()
         self.connection.add_event(Connection.ERROR, on_error)
+        self.connection.add_event(Connection.CREATE_SESSION, lambda: print("session!", self.connection._session))
 
         # if the user didn't ask us to start the reactor, then they
         # get to deal with any connect errors themselves.
