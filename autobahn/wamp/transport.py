@@ -76,8 +76,12 @@ def check_endpoint(endpoint, listen=False):
     :returns: True if this is a valid endpoint, or an exception otherwise
     """
 
+    valid_keys = [
+        'type', 'port', 'version', 'interface', 'backlog', 'shared',
+        'tls', 'path', 'host', 'ssl',
+    ]
     for key in endpoint.keys():
-        assert key in ['type', 'port', 'version', 'interface', 'backlog', 'shared', 'tls', 'path', 'host'], key
+        assert key in valid_keys, "Invalid key '{}'".format(key)
 
     kind = endpoint.get('type', 'tcp')
     assert kind in ['tcp', 'unix']
