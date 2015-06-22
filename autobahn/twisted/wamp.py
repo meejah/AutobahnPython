@@ -29,6 +29,7 @@ from __future__ import absolute_import, print_function
 import sys
 import inspect
 from types import StringType
+import json
 
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
@@ -125,6 +126,7 @@ def _connect_stream(reactor, cfg, wamp_transport_factory):
     return client.connect(wamp_transport_factory)
 
 
+# XXX this can probably be shared between asyncio + Twisted
 def _create_wamp_factory(reactor, cfg, session_factory):
     """
     Internal helper.
@@ -149,6 +151,7 @@ def _create_wamp_factory(reactor, cfg, session_factory):
 
 
 # XXX THINK move to transport.py?
+# XXX can this be made generic by passing loop/reactor and using txaio?
 @inlineCallbacks
 def connect_to(reactor, transport_config, session_factory, realm, extra, on_error=None):
     """
@@ -199,17 +202,28 @@ def connect_to(reactor, transport_config, session_factory, realm, extra, on_erro
     returnValue(proto)
 
 
+# XXX probably want IConnection to declare API (e.g. so asyncio one
+# follows it as well)
+# XXX we can probably make this common via txaio as well...
 class Connection(object):
     """
     This represents configuration of a protocol and transport to make
-    a WAMP connection to particular endpoints.
+    a WAMP connection to particular endpoints. Retry behavior can be
+    configured also.
 
      - a WAMP protocol is "websocket" or "rawsocket"
      - the transport is TCP4, TCP6 (with or without TLS) or Unix socket.
 
     This handles the lifecycles of the underlying transport/protocol
-    pair, providing notifications of transitions and deals with
-    reconnecting (if configured).
+    pair, providing notifications of transitions.
+
+    If a retry configuration is provided, this class deals with
+    reconnecting. So for example if a transport "went away", you would
+    receive two CREATE_SESSION events as the WAMP session got
+    re-started (and hence re-created). Thus, you should prefer
+    accessing the session and protocol via `Connection.session` and
+    `Connection.protocol`. These are ``None`` if the transport is not
+    connected, or the session has yet to be established.
     """
 
     """
@@ -220,7 +234,24 @@ class Connection(object):
     and then join() again without the transport closing.
     """
 
-    ERROR = object()
+    ERROR = object()  # probably want transport_error vs protocol_error?
+    CREATE_SESSION = object()
+
+    def __init__(self, session_factory, transports, realm, extra, retry):
+        """
+        :param session_factory: callable that takes a ComponentConfig and
+        returns a new ApplicationSession subclass
+
+        :param transports: a list of dicts configuring available transports
+
+        :param realm: the realm to join
+        :type realm: unicode
+
+        :param extra: an object available as 'self.config.extra' in
+        your ApplicationSession subclass. Can be anything, e.g dict().
+
+        :param retry: either False or a dict configurating retry logic
+        """
 
     def __init__(self, session_factory, transports, realm, extra):
         # self._runner = runner
@@ -289,6 +320,14 @@ class Connection(object):
         )
         # should "listen" for connectionLost ... etc. and also add our
         # own error-handler ...
+
+    def _fire_event(self, evt, *args, **kw):
+        for cb in self._event_listeners[evt]:
+            try:
+                cb(*args, **kw)
+            except Exception as e:
+                print("While running callback {} for {}: {}".format(
+                    cb, evt, e))
 
     def _create_session(self, cfg):
         self.session = self._session_factory(cfg)
