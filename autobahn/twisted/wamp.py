@@ -29,10 +29,12 @@ from __future__ import absolute_import, print_function
 import sys
 import inspect
 from types import StringType
+from functools import wraps
 import json
 
 from twisted.python import log
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
+from twisted.internet.error import ConnectionDone
 
 from autobahn.wamp import protocol
 from autobahn.wamp.types import ComponentConfig
@@ -234,8 +236,11 @@ class Connection(object):
     and then join() again without the transport closing.
     """
 
-    ERROR = object()  # probably want transport_error vs protocol_error?
-    CREATE_SESSION = object()
+    ERROR = object()  #: callback gets Failure instance  XXX probably want transport_error vs protocol_error?
+    CREATE_SESSION = object()  #: callback gets ApplicationSession instance
+    SESSION_LEAVE = object()  #: callback gets ApplicationSession instance
+    CONNECTED = object()  #: callback gets IProtocol instance
+    CONNECTION_LOST = object()  #: callback gets Failure instance
 
     def __init__(self, session_factory, transports, realm, extra, retry):
         """
@@ -262,9 +267,14 @@ class Connection(object):
         # state, also API
         self.protocol = None
         self.session = None
+        self.connect_count = 0
 
         self._event_listeners = {
             self.ERROR: [],
+            self.CREATE_SESSION: [],
+            self.SESSION_LEAVE: [],
+            self.CONNECTION_LOST: [],
+            self.CONNECTED: [],
         }
 
         def transport_gen():
@@ -322,6 +332,9 @@ class Connection(object):
         # own error-handler ...
 
     def _fire_event(self, evt, *args, **kw):
+        """
+        Internal helper. MUST NOT throw Exceptions
+        """
         for cb in self._event_listeners[evt]:
             try:
                 cb(*args, **kw)
@@ -331,8 +344,22 @@ class Connection(object):
 
     def _create_session(self, cfg):
         self.session = self._session_factory(cfg)
-        # should "listen" for onLeave
-        self._fire_event(self.CREATE_SESSION)
+        print("CREATE SESSION", self.session)
+        self._fire_event(self.CREATE_SESSION, self.session)
+        self.connect_count += 1
+
+        # "listen" for onLeave
+        on_leave = self.session.onLeave
+        @wraps(self.session.onLeave)
+        def wrapper(*args, **kw):
+            print("SESSION LEAVING", args[0], id(self.session))
+            # callback with the Failure instance
+            rtn = on_leave(*args, **kw)
+            self._fire_event(self.SESSION_LEAVE, self.session)
+            self.session = None  # should come *after* callbacks
+            return rtn
+        self.session.onLeave = wrapper
+
         return self.session
 
     def __str__(self):
