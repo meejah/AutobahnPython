@@ -26,18 +26,7 @@
 
 from __future__ import absolute_import
 
-def check_retry(cfg):
-    """
-    Checks that the given configuration is a valid retry-logic configuration.
-
-    :param cfg: A dict containing keys:
-
-    - ``max_retries``: maximum attempts before giving up
-    """
-    # XXX FIXME
-    return True
-
-def check_transport(transport, listen=False):
+def check(transport, listen=False):
     """
     :param listen: True if this transport will be used for listening
 
@@ -66,6 +55,21 @@ def check_transport(transport, listen=False):
     else:
         return True
 
+
+def check_retry(cfg):
+    """
+    Checks that the given configuration is a valid retry-logic configuration.
+
+    :param cfg: A dict containing keys:
+
+    - ``max_retries``: maximum attempts before giving up
+    """
+    # XXX FIXME
+    return True
+
+
+# XXX could also allow "endpoint" to be a string, and if so
+# treat it as a Twisted endpoint-string?
 def check_endpoint(endpoint, listen=False):
     """
     :param listen: True if this transport will be used for listening
