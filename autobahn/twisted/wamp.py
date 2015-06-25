@@ -170,10 +170,6 @@ def connect_to(reactor, transport_config, session_factory, realm, extra, on_erro
     :returns: Deferred that callbacks with ... "Connection" instance?
     Nothing? .. after a connection has been made (not necessarily a
     WAMP session joined yet, however)
-
-    XXX THINK is this sufficient API along with re-connection? We
-    should be able to re-connect the very same ApplicationSession
-    instance...
     """
 
     # factory for using ApplicationSession
@@ -225,7 +221,7 @@ class Connection(object):
     re-started (and hence re-created). Thus, you should prefer
     accessing the session and protocol via `Connection.session` and
     `Connection.protocol`. These are ``None`` if the transport is not
-    connected, or the session has yet to be established.
+    connected, or if the session has yet to be established.
     """
 
     """
@@ -245,17 +241,23 @@ class Connection(object):
     def __init__(self, session_factory, transports, realm, extra, retry):
         """
         :param session_factory: callable that takes a ComponentConfig and
-        returns a new ApplicationSession subclass
+            returns a new ApplicationSession subclass
 
-        :param transports: a list of dicts configuring available transports
+        :param transports: a list of dicts configuring available
+            transports. See :meth:`autobahn.wamp.transport.check` for
+            valid keys
+        :type transports: list of dicts
 
         :param realm: the realm to join
         :type realm: unicode
 
         :param extra: an object available as 'self.config.extra' in
-        your ApplicationSession subclass. Can be anything, e.g dict().
+            your ApplicationSession subclass. Can be anything, e.g
+            dict().
 
-        :param retry: either False or a dict configurating retry logic
+        :param retry: either None (no retrying) or a dict
+            configurating retry logic
+        :type retry: dict
         """
 
     def __init__(self, session_factory, transports, realm, extra):
@@ -269,6 +271,7 @@ class Connection(object):
         self.session = None
         self.connect_count = 0
 
+        # our event listeners
         self._event_listeners = {
             self.ERROR: [],
             self.CREATE_SESSION: [],
@@ -286,14 +289,15 @@ class Connection(object):
     def add_event(self, event_type, cb):
         """
         Add a listener for the given ``event_type``; the callback ``cb``
-        is a zero-argument callable.
-        XXX maybe callback with "self"?
-        XXX maybe args-per-event? like ERROR gets the Failure?
+        takes a single argument, whose value depends on the event.
 
         Valid events are:
 
-         - ``ERROR``: called whenever a connect() attempt fails
-         - etc. probably: transport up/down/failed, session up/down (failed?)
+         - ``ERROR``: called with Exception whenever a connect() attempt fails
+         - ``CREATE_SESSION``: called with ApplicationSession instance upon session creation
+         - ``SESSION_LEAVE``: called with ApplicationSession instance when session leaves
+         - ``CONNECTED``: called with IProtocol instance when transport connects
+         - ``CONNECTION_LOST``: called when transport disconnects with None if clean, or Exception
 
         """
         try:
@@ -432,12 +436,12 @@ class ApplicationRunner(object):
         self.ssl = ssl
         self._protocol = None
         self._session = None
-        if type(url_or_transports) is StringType:
+        if type(url_or_transports) in [StringType, six.text_type] :
             # XXX emit deprecation-warning? is it really deprecated?
             isSecure, host, port, resource, path, params = parseWsUrl(url_or_transports)
             self.transports = [{
                 "type": "websocket",
-                "url": transports,
+                "url": unicode(url_or_transports),
                 "endpoint": {
                     "type": "tcp",
                     "host": host,
@@ -445,11 +449,12 @@ class ApplicationRunner(object):
                 }
             }]
         else:
+            # XXX shall we also handle "passing a single dict" instead of 1-entry list?
             self.transports = url_or_transports
 
         # validate the transports we have
         for cfg in self.transports:
-            transport.check_transport(cfg, listen=False)
+            transport.check(cfg, listen=False)
             cfg['endpoint']['ssl'] = ssl  # HACK FIXME
 
     def run(self, session_factory, start_reactor=True):
@@ -479,10 +484,12 @@ class ApplicationRunner(object):
         txaio.config.loop = reactor
 
 
-        # start logging to console
-        if True or self.debug or self.debug_wamp or self.debug_app:
-            log.startLogging(sys.stdout)
+        # XXX FIXME should we really start logging automagically? or
+        # not... or provide a "start_logging=True" kwarg?
 
+        # XXX I guess the "experts" interface is:
+        # Connection(..).connect() and then you can start logging however you want...?
+        log.startLogging(sys.stdout)
 
         self.connection = Connection(
             session_factory,
@@ -492,6 +499,8 @@ class ApplicationRunner(object):
         )
 
         def on_error(e):
+            if e is not None:
+                print("Error:", e)
             if start_reactor:
                 reactor.stop()
         self.connection.add_event(Connection.ERROR, on_error)
@@ -529,10 +538,9 @@ class ApplicationRunner(object):
         else:
             # let the caller handle any errors
             d = self.connection.connect(reactor)
-            # we return a Connection instance (_ will be IProtocol)
+            # we return a Connection instance ("_" will be IProtocol)
             d.addCallback(lambda _: self.connection)
             return d
-
 
 
 class _ApplicationSession(ApplicationSession):
