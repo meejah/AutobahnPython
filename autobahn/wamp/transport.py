@@ -29,6 +29,7 @@ from __future__ import absolute_import
 def check(transport, listen=False):
     """
     :param listen: True if this transport will be used for listening
+        (False means a client connection)
 
     :param transport:
         a dict defining a WAMP transport. A WAMP transport definition
@@ -53,6 +54,9 @@ def check(transport, listen=False):
     if 'endpoint' in transport:
         return check_endpoint(transport['endpoint'], listen=listen)
     else:
+        if kind != 'websocket':
+            raise RuntimeError("Must provide 'endpoint' configuration "
+                               "for '{}'".format(transport['type']))
         return True
 
 
