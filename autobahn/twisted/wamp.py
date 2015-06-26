@@ -100,37 +100,44 @@ def _connect_stream(reactor, cfg, wamp_transport_factory):
 
     Connects the given wamp_transport_factory to a stream endpoint, as
     determined from the cfg that's passed in (which should be just the
-    "endpoint" dict). Returns Deferred that fires with IProtocol
+    "endpoint" part). Returns Deferred that fires with IProtocol
     """
 
-    if cfg['type'] == 'unix':
-        if cfg['ssl']:
-            raise RuntimeError("No TLS in Unix sockets")
-        from twisted.internet.endpoints import UNIXClientEndpoint
-        client = UNIXClientEndpoint(reactor, cfg['path'])
+    if isinstance(cfg, six.text_type):
+        client = clientFromString(cfg)
 
-    elif cfg['type'] == 'tcp':
-        if cfg.get('version', 4) == 4:
-            if cfg.has_key('ssl') and cfg.has_key('tls'):
-                raise RuntimeError("'ssl' and 'tls' are mutually exclusive "
-                                   "in endpoint configuration")
-            if cfg['ssl']:
-                # ssl= should be a "native" Twisted TLS configuration,
-                # that is a :tx:`twisted.internet.ssl.ContextFactory`
-                context_factory = cfg['ssl']
-                from twisted.internet.endpoints import SSL4ClientEndpoint
-                assert context_factory is not None
-                client = SSL4ClientEndpoint(reactor, cfg['host'], cfg['port'], cfg['ssl'])
-            else:
-                from twisted.internet.endpoints import TCP4ClientEndpoint
-                client = TCP4ClientEndpoint(reactor, cfg['host'], cfg['port'])
-        else:
-            if cfg['ssl']:
-                raise RuntimeError("FIXME: TLS over IPv6")
-            from twisted.internet.endpoints import TCP6ClientEndpoint
-            client = TCP6ClientEndpoint(reactor, cfg['host'], cfg['port'])
+    # XXX could accept an actual endpoint instance, too/instead?
+
     else:
-        raise RuntimeError("Unknown type='{}'".format(cfg['type']))
+        if cfg['type'] == 'unix':
+            if cfg['ssl']:
+                raise RuntimeError("No TLS in Unix sockets")
+            from twisted.internet.endpoints import UNIXClientEndpoint
+            client = UNIXClientEndpoint(reactor, cfg['path'])
+
+        elif cfg['type'] == 'tcp':
+            if cfg.get('version', 4) == 4:
+                if 'ssl' in cfg and 'tls' in cfg:
+                    raise RuntimeError("'ssl' and 'tls' are mutually exclusive "
+                                       "in endpoint configuration")
+                if cfg['ssl']:
+                    # ssl= should be a "native" Twisted TLS configuration,
+                    # that is a :tx:`twisted.internet.ssl.ContextFactory`
+                    context_factory = cfg['ssl']
+                    from twisted.internet.endpoints import SSL4ClientEndpoint
+                    assert context_factory is not None
+                    client = SSL4ClientEndpoint(reactor, cfg['host'], cfg['port'],
+                                                cfg['ssl'])
+                else:
+                    from twisted.internet.endpoints import TCP4ClientEndpoint
+                    client = TCP4ClientEndpoint(reactor, cfg['host'], cfg['port'])
+            else:
+                if cfg['ssl']:
+                    raise RuntimeError("FIXME: TLS over IPv6")
+                from twisted.internet.endpoints import TCP6ClientEndpoint
+                client = TCP6ClientEndpoint(reactor, cfg['host'], cfg['port'])
+        else:
+            raise RuntimeError("Unknown type='{}'".format(cfg['type']))
 
     print("Connecting", client)
     return client.connect(wamp_transport_factory)
