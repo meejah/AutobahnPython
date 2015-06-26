@@ -88,10 +88,11 @@ class ApplicationSessionFactory(protocol.ApplicationSessionFactory):
 
     session = ApplicationSession
     """
-   The application session class this application session factory will use. Defaults to :class:`autobahn.twisted.wamp.ApplicationSession`.
-   """
+    The application session class this application session factory
+    will use. Defaults to :class:`autobahn.twisted.wamp.ApplicationSession`.
+    """
 
-
+# XXX this would need an asyncio vs Twisted impl if going that route ...
 def _connect_stream(reactor, cfg, wamp_transport_factory):
     """
     Internal helper.
@@ -109,7 +110,13 @@ def _connect_stream(reactor, cfg, wamp_transport_factory):
 
     elif cfg['type'] == 'tcp':
         if cfg.get('version', 4) == 4:
-            if cfg['ssl']:  # NOTE: "tls" is the config-key; jamming ssl= __init__ arg here for now
+            if cfg.has_key('ssl') and cfg.has_key('tls'):
+                raise RuntimeError("'ssl' and 'tls' are mutually exclusive "
+                                   "in endpoint configuration")
+            if cfg['ssl']:
+                # ssl= should be a "native" Twisted TLS configuration,
+                # that is a :tx:`twisted.internet.ssl.ContextFactory`
+                context_factory = cfg['ssl']
                 from twisted.internet.endpoints import SSL4ClientEndpoint
                 assert context_factory is not None
                 client = SSL4ClientEndpoint(reactor, cfg['host'], cfg['port'], cfg['ssl'])
@@ -128,7 +135,9 @@ def _connect_stream(reactor, cfg, wamp_transport_factory):
     return client.connect(wamp_transport_factory)
 
 
-# XXX this can probably be shared between asyncio + Twisted
+# needs custom asycio vs Twisted (because where the imports come from)
+# -- or would have to do "if txaio.using_twisted():" etc switch-type
+# statement.
 def _create_wamp_factory(reactor, cfg, session_factory):
     """
     Internal helper.
@@ -140,16 +149,11 @@ def _create_wamp_factory(reactor, cfg, session_factory):
     """
 
     # type in ['websocket', 'rawsocket']
-    def create_websocket():
-        return WampWebSocketClientFactory(session_factory, url=cfg['url'])
-
-    def create_rawsocket():
-        return WampRawSocketClientFactory(session_factory)
-
-    return {
-        'websocket': create_websocket,
-        'rawsocket': create_rawsocket,
-    }[cfg['type']]()
+    create_instance = {
+        "websocket": lambda: WampWebSocketClientFactory(session_factory, url=cfg['url']),
+        "rawsocket": lambda: WampRawSocketClientFactory(session_factory),
+    )
+    return create_instance[cfg['type']]()
 
 
 # XXX THINK move to transport.py?
@@ -245,21 +249,20 @@ class Connection(object):
     accessing the session and protocol via `Connection.session` and
     `Connection.protocol`. These are ``None`` if the transport is not
     connected, or if the session has yet to be established.
+
+    If :class:`ApplicationRunner <autobahn.twisted.wamp.ApplicationRunner`
+    API is too high-level for your use-case, Connection lets you set
+    up your own Twisted logging, call ``reactor.run()`` yourself,
+    etc. ApplicationRunner in fact simply uses Connection internally.
     """
 
-    """
-    Quick `WAMP lifecycle <FIXME>`_ summary: transports live longer
-    than WAMP Sessions (which in fact can be created several times
-    without taking down the transport, if you want). If the transport
-    goes away, any WAMP Session is ended. The WAMP Session can leave()
-    and then join() again without the transport closing.
-    """
-
-    ERROR = object()  #: callback gets Failure instance  XXX probably want transport_error vs protocol_error?
+    # possible events that we emit; if adding one, add to
+    # _event_listeners dict too
+    ERROR = object()  #: callback gets Exception instance
     CREATE_SESSION = object()  #: callback gets ApplicationSession instance
     SESSION_LEAVE = object()  #: callback gets ApplicationSession instance
     CONNECTED = object()  #: callback gets IProtocol instance
-    CONNECTION_LOST = object()  #: callback gets Failure instance
+    CONNECTION_LOST = object()  #: callback gets None or Exception instance
 
     def __init__(self, session_factory, transports, realm, extra, retry):
         """
@@ -279,13 +282,21 @@ class Connection(object):
             dict().
 
         :param retry: either None (no retrying) or a dict
-            configurating retry logic
+            configurating retry logic see the documentation for
+            :meth:`autobahn.wamp.transport.check_retry` for valid keys
         :type retry: dict
         """
 
+        # state (also part of the API)
+        self.protocol = None
+        self.session = None
+        self.connect_count = 0
+
+        # private state + config
         self._session_factory = session_factory
         self._realm = realm
         self._extra = extra
+
         # retry logic
         self._retry = None
         self._retry_scheduler = lambda: None
@@ -294,11 +305,6 @@ class Connection(object):
             self._retry_scheduler = _create_retry_scheduler(retry)
             self._retry = self._retry_scheduler()
             self._retry_on_unreachable = retry.get('retry_on_unreachable', False)
-
-        # state, also API
-        self.protocol = None
-        self.session = None
-        self.connect_count = 0
 
         # our event listeners
         self._event_listeners = {
@@ -348,6 +354,8 @@ class Connection(object):
         except KeyError:
             msg = "No listeners for event '{}'"
             raise ValueError(msg.format(event_type))
+
+    # XXX actually, just this thing needs custom implementation for asyncio vs. Twisted?
 
     @inlineCallbacks
     def connect(self, reactor):
@@ -429,7 +437,6 @@ class Connection(object):
 
     def _create_session(self, cfg):
         self.session = self._session_factory(cfg)
-        print("CREATE SESSION", self.session)
         self._fire_event(self.CREATE_SESSION, self.session)
         self.connect_count += 1
 
@@ -437,11 +444,10 @@ class Connection(object):
         on_leave = self.session.onLeave
         @wraps(self.session.onLeave)
         def wrapper(*args, **kw):
-            print("SESSION LEAVING", args[0], id(self.session))
             # callback with the Failure instance
             rtn = on_leave(*args, **kw)
             self._fire_event(self.SESSION_LEAVE, self.session)
-            self.session = None  # should come *after* callbacks
+            self.session = None  # must come *after* callbacks
             return rtn
         self.session.onLeave = wrapper
 
