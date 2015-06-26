@@ -92,6 +92,7 @@ class ApplicationSessionFactory(protocol.ApplicationSessionFactory):
     will use. Defaults to :class:`autobahn.twisted.wamp.ApplicationSession`.
     """
 
+
 # XXX this would need an asyncio vs Twisted impl if going that route ...
 def _connect_stream(reactor, cfg, wamp_transport_factory):
     """
@@ -152,7 +153,7 @@ def _create_wamp_factory(reactor, cfg, session_factory):
     create_instance = {
         "websocket": lambda: WampWebSocketClientFactory(session_factory, url=cfg['url']),
         "rawsocket": lambda: WampRawSocketClientFactory(session_factory),
-    )
+    }
     return create_instance[cfg['type']]()
 
 
@@ -221,11 +222,16 @@ def _create_retry_scheduler(cfg):
         max_delay = cfg.get("max_retry_delay", 300)
         rate = cfg.get("retry_growth_rate", 1.5)
         # retry_delay_jitter
-        for retry in range(max_retries):
+        attempts = 1
+        while True:
             yield delay
             delay *= rate
             delay = min(delay, max_delay)
+            attempts += 1
+            if attempts > max_retries:
+                break
     return retry_schedule
+
 
 # XXX probably want IConnection to declare API (e.g. so asyncio one
 # follows it as well)
@@ -254,6 +260,16 @@ class Connection(object):
     API is too high-level for your use-case, Connection lets you set
     up your own Twisted logging, call ``reactor.run()`` yourself,
     etc. ApplicationRunner in fact simply uses Connection internally.
+
+    :ivar protocol: current protocol instance, or ``None``
+    :type protocol: tx:`twisted.internet.interfaces.IProtocol`
+
+    :ivar session: current ApplicationSession instance, or ``None``
+    :type session: class:`autobahn.wamp.protocol.ApplicationSession` subclass
+
+    :ivar connect_count: how many times we've successfully connected
+        ("connected" at the transport level, *not* WAMP session "onJoin"
+        level)
     """
 
     # possible events that we emit; if adding one, add to
@@ -263,6 +279,15 @@ class Connection(object):
     SESSION_LEAVE = object()  #: callback gets ApplicationSession instance
     CONNECTED = object()  #: callback gets IProtocol instance
     CONNECTION_LOST = object()  #: callback gets None or Exception instance
+
+    # XXX what about a "giving up now" event, mostly related to retry
+    # / reconnection (i.e. this event would fire when this Connection
+    # will no longer be trying to connect). ApplicationRunner would
+    # use this to "reactor.stop()" and direct users of Connection can
+    # do what they feel like. Maybe that's what ERROR should be
+    # called, instead? So it gets None if there was no error
+    # (i.e. .leave() was callled on the session) otherwise, Exception
+    # instance
 
     def __init__(self, session_factory, transports, realm, extra, retry):
         """
@@ -291,6 +316,7 @@ class Connection(object):
         self.protocol = None
         self.session = None
         self.connect_count = 0
+        self.attempt_count = 0
 
         # private state + config
         self._session_factory = session_factory
@@ -305,6 +331,7 @@ class Connection(object):
             self._retry_scheduler = _create_retry_scheduler(retry)
             self._retry = self._retry_scheduler()
             self._retry_on_unreachable = retry.get('retry_on_unreachable', False)
+        self._shutting_down = False
 
         # our event listeners
         self._event_listeners = {
@@ -364,9 +391,10 @@ class Connection(object):
         Deferred that fires (with None) when we first connect.
         """
 
-        while True:
+        while not self._shutting_down:
             try:
                 transport_config = next(self._transport_gen)
+                self.attempt_count += 1
                 self.protocol = yield connect_to(
                     reactor,
                     transport_config,
@@ -374,9 +402,12 @@ class Connection(object):
                     self._realm,
                     self._extra,
                 )
+                # note: we increment self._connect_count when the
+                # ApplicationSession instance is created
 
+                # "listen" for connectionLost
                 orig = self.protocol.transport.connectionLost
-                # listen for connectionLost
+
                 @wraps(self.protocol.transport.connectionLost)
                 def wrapper(*args, **kw):
                     # callback with the Failure instance
@@ -390,11 +421,12 @@ class Connection(object):
                     # initiate re-connection
                     print("connect count", self.connect_count)
                     if self.connect_count == 0:
-                        if self._retry_on_unreachable:
+                        if self._retry_on_unreachable and not self._shutting_down:
                             self.connect(reactor)
                     else:
                         # we've connected at least once before; keep trying
-                        self.connect(reactor)
+                        if not self._shutting_down:
+                            self.connect(reactor)
                     return rtn
                 self.protocol.transport.connectionLost = wrapper
 
@@ -423,6 +455,7 @@ class Connection(object):
                 else:
                     self._fire_event(self.ERROR, e)
                     break
+        print("leaving connect() loop")
 
     def _fire_event(self, evt, *args, **kw):
         """
@@ -442,6 +475,7 @@ class Connection(object):
 
         # "listen" for onLeave
         on_leave = self.session.onLeave
+
         @wraps(self.session.onLeave)
         def wrapper(*args, **kw):
             # callback with the Failure instance
@@ -451,20 +485,36 @@ class Connection(object):
             return rtn
         self.session.onLeave = wrapper
 
+        # "listen" for disconnect/leave so we know if we should keep
+        # re-trying or not ...
+        # this means: disconnect() and we keep reconnecting; leave() and we stop
+        leave = self.session.leave
+        @wraps(self.session.leave)
+        def wrapper(*args, **kw):
+            rtn = leave(*args, **kw)
+            self._shutting_down = True
+            return rtn
+        self.session.leave = wrapper
+
         return self.session
 
     def __str__(self):
-        return "<Connection session={} protocol={}>".format(
-            self.session.__class__.__name__, self.protocol.__class__.__name__)
+        return "<Connection session={} protocol={} attempts={} connected={}>".format(
+            self.session.__class__.__name__, self.protocol.__class__.__name__,
+            self.attempt_count, self.connect_count)
 
 
 class ApplicationRunner(object):
     """
-    This class is a convenience tool mainly for development and quick hosting
-    of WAMP application components.
+    Provides a high-level API that is (mostly) consistent across
+    asyncio and Twisted code. It provides an easy way to configure
+    transports and retry/re-connect options.
 
-    It can host a WAMP application component in a WAMP-over-WebSocket client
-    connecting to a WAMP router.
+    If you want more control over the reactor and logging, see the
+    :class:`Connection` class.
+
+    If you need lower-level control than that, see :meth:`connect_to`
+    which attempts a single connection to a single transport.
     """
 
     def __init__(self, url_or_transports, realm, extra=None,
@@ -492,7 +542,8 @@ class ApplicationRunner(object):
 
         :type transports: iterable (of dicts)
 
-        :param extra: Optional extra configuration to forward to the application component.
+        :param extra: Optional extra configuration to forward to the
+            application component.
         :type extra: dict
 
         :param debug: Turn on low-level debugging.
@@ -523,9 +574,9 @@ class ApplicationRunner(object):
         self.ssl = ssl
         self._protocol = None
         self._session = None
-        if type(url_or_transports) in [StringType, six.text_type] :
+        if type(url_or_transports) in [StringType, six.text_type]:
             # XXX emit deprecation-warning? is it really deprecated?
-            isSecure, host, port, resource, path, params = parseWsUrl(url_or_transports)
+            _, host, port, _, _, _ = parseWsUrl(url_or_transports)
             self.transports = [{
                 "type": "websocket",
                 "url": unicode(url_or_transports),
@@ -572,7 +623,6 @@ class ApplicationRunner(object):
         txaio.use_twisted()
         txaio.config.loop = reactor
 
-
         # XXX FIXME should we really start logging automagically? or
         # not... or provide a "start_logging=True" kwarg?
 
@@ -594,7 +644,6 @@ class ApplicationRunner(object):
             if start_reactor:
                 reactor.stop()
         self.connection.add_event(Connection.ERROR, on_error)
-        self.connection.add_event(Connection.CREATE_SESSION, lambda: print("session!", self.connection.session))
 
         # if the user didn't ask us to start the reactor, then they
         # get to deal with any connect errors themselves.
@@ -636,7 +685,8 @@ class ApplicationRunner(object):
 
 class _ApplicationSession(ApplicationSession):
     """
-    WAMP application session class used internally with :class:`autobahn.twisted.app.Application`.
+    WAMP application session class used internally with
+    :class:`autobahn.twisted.app.Application`.
     """
 
     def __init__(self, config, app):
@@ -696,23 +746,24 @@ class Application(object):
 
     def __init__(self, prefix=None):
         """
-
-        :param prefix: The application URI prefix to use for procedures and topics,
-           e.g. ``"com.example.myapp"``.
+        :param prefix: The application URI prefix to use for
+           procedures and topics, e.g. ``"com.example.myapp"``.
         :type prefix: unicode
         """
         self._prefix = prefix
 
-        # procedures to be registered once the app session has joined the router/realm
+        #: procedures to be registered once the app session has joined
+        #: the router/realm
         self._procs = []
 
-        # event handler to be subscribed once the app session has joined the router/realm
+        #: event handler to be subscribed once the app session has
+        #: joined the router/realm
         self._handlers = []
 
-        # app lifecycle signal handlers
+        #: app lifecycle signal handlers
         self._signals = {}
 
-        # once an app session is connected, this will be here
+        #: once an app session is connected, this will be that instance
         self.session = None
 
     def __call__(self, config):
