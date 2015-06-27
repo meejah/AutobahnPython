@@ -285,7 +285,8 @@ class Connection(object):
     CREATE_SESSION = object()  #: callback gets ApplicationSession instance
     SESSION_LEAVE = object()  #: callback gets ApplicationSession instance
     CONNECTED = object()  #: callback gets IProtocol instance
-    CONNECTION_LOST = object()  #: callback gets None or Exception instance
+    CLOSED = object()  #: callback gets reason (string) + details (CloseDetails instance)
+                       #: reason is "lost", "closed" or "unreachable"
 
     # XXX what about a "giving up now" event, mostly related to retry
     # / reconnection (i.e. this event would fire when this Connection
@@ -345,8 +346,8 @@ class Connection(object):
             self.ERROR: [],
             self.CREATE_SESSION: [],
             self.SESSION_LEAVE: [],
-            self.CONNECTION_LOST: [],
             self.CONNECTED: [],
+            self.CLOSED: [],
         }
 
         # we just always loop over the transports when trying another
@@ -360,7 +361,11 @@ class Connection(object):
     def add_event(self, event_type, cb):
         """
         Add a listener for the given ``event_type``; the callback ``cb``
-        takes a single argument, whose value depends on the event.
+        takes a single argument, whose value depends on the
+        event.
+
+        XXX should CLOSED be an exception and take CloseDetails also?
+        but only when "closed" state?! (like AutobahnJS)
 
         Valid events are:
 
@@ -368,8 +373,7 @@ class Connection(object):
          - ``CREATE_SESSION``: called with ApplicationSession instance upon session creation
          - ``SESSION_LEAVE``: called with ApplicationSession instance when session leaves
          - ``CONNECTED``: called with IProtocol instance when transport connects
-         - ``CONNECTION_LOST``: called when transport disconnects with None if clean, or Exception
-
+         - ``CLOSED``: called when transport disconnects with "unreachable", "lost", or "closed"
         """
         try:
             self._event_listeners[event_type].append(cb)
@@ -420,11 +424,22 @@ class Connection(object):
                     # callback with the Failure instance
                     rtn = orig(*args, **kw)
                     f = args[0]
-                    if isinstance(f.value, ConnectionDone):
-                        self._fire_event(self.CONNECTION_LOST, None)
+                    print("LOST", args, kw)
+                    if self.connect_count == 0:
+                        self._fire_event(self.CLOSED, "unreachable")
                     else:
-                        self._fire_event(self.CONNECTION_LOST, f.value)
+                        if isinstance(f.value, ConnectionDone):
+                            self._fire_event(self.CLOSED, "closed")
+                        else:
+                            ### XXX javascrpt allows this to return
+                            ### "false" to cancel reconnection
+                            self._fire_event(self.CLOSED, "lost")
                     self.protocol = None
+
+                    # XXX should probably base re-connection on above
+                    # strings? or do it right in there too? (for
+                    # consistency)
+
                     # initiate re-connection
                     print("connect count", self.connect_count)
                     if self.connect_count == 0:
