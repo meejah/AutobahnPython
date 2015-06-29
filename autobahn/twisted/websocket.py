@@ -34,6 +34,7 @@ import twisted.internet.protocol
 from twisted.internet.defer import maybeDeferred
 from twisted.python import log
 from twisted.internet.interfaces import ITransport
+from twisted.logger import Logger
 
 from autobahn.wamp import websocket
 from autobahn.websocket import protocol
@@ -74,6 +75,8 @@ class WebSocketAdapterProtocol(twisted.internet.protocol.Protocol):
     """
     Adapter class for Twisted WebSocket client and server protocols.
     """
+
+    logger = Logger()
 
     def connectionMade(self):
         # the peer we are connected to
@@ -170,8 +173,7 @@ class WebSocketServerProtocol(WebSocketAdapterProtocol, protocol.WebSocketServer
             if failure.check(http.HttpException):
                 return self.failHandshake(failure.value.reason, failure.value.code)
             else:
-                if self.debug:
-                    self.factory._log("Unexpected exception in onConnect ['%s']" % failure.value)
+                self.factory._log("Unexpected exception in onConnect ['%s']" % failure.value)
                 return self.failHandshake(http.INTERNAL_SERVER_ERROR[1], http.INTERNAL_SERVER_ERROR[0])
 
         res.addErrback(forwardError)
