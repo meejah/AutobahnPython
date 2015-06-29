@@ -218,22 +218,13 @@ def connect_to(reactor, transport_config, session_factory, realm, extra, on_erro
 class Connection(object):
     """
     This represents configuration of a protocol and transport to make
-    a WAMP connection to particular endpoints. Retry behavior can be
-    configured also.
+    a WAMP connection to particular endpoints.
 
      - a WAMP protocol is "websocket" or "rawsocket"
      - the transport is TCP4, TCP6 (with or without TLS) or Unix socket.
 
     This handles the lifecycles of the underlying transport/protocol
     pair, providing notifications of transitions.
-
-    If a retry configuration is provided, this class deals with
-    reconnecting. So for example if a transport "went away", you would
-    receive two CREATE_SESSION events as the WAMP session got
-    re-started (and hence re-created). Thus, you should prefer
-    accessing the session and protocol via `Connection.session` and
-    `Connection.protocol`. These are ``None`` if the transport is not
-    connected, or if the session has yet to be established.
 
     If :class:`ApplicationRunner <autobahn.twisted.wamp.ApplicationRunner`
     API is too high-level for your use-case, Connection lets you set
@@ -260,16 +251,7 @@ class Connection(object):
     CLOSED = object()  #: callback gets reason (string) + details (CloseDetails instance)
                        #: reason is "lost", "closed" or "unreachable"
 
-    # XXX what about a "giving up now" event, mostly related to retry
-    # / reconnection (i.e. this event would fire when this Connection
-    # will no longer be trying to connect). ApplicationRunner would
-    # use this to "reactor.stop()" and direct users of Connection can
-    # do what they feel like. Maybe that's what ERROR should be
-    # called, instead? So it gets None if there was no error
-    # (i.e. .leave() was callled on the session) otherwise, Exception
-    # instance
-
-    def __init__(self, session_factory, transports, realm, extra, retry):
+    def __init__(self, session_factory, transports, realm, extra):
         """
         :param session_factory: callable that takes a ComponentConfig and
             returns a new ApplicationSession subclass
@@ -285,11 +267,6 @@ class Connection(object):
         :param extra: an object available as 'self.config.extra' in
             your ApplicationSession subclass. Can be anything, e.g
             dict().
-
-        :param retry: either None (no retrying) or a dict
-            configurating retry logic see the documentation for
-            :meth:`autobahn.wamp.transport.check_retry` for valid keys
-        :type retry: dict
         """
 
         # state (also part of the API)
@@ -302,16 +279,6 @@ class Connection(object):
         self._session_factory = session_factory
         self._realm = realm
         self._extra = extra
-
-        # retry logic
-        self._retry = None
-        self._retry_scheduler = lambda: None
-        self._retry_on_unreachable = False
-        if retry is not None:
-            self._retry_scheduler = _create_retry_scheduler(retry)
-            self._retry = self._retry_scheduler()
-            self._retry_on_unreachable = retry.get('retry_on_unreachable', False)
-        self._shutting_down = False
 
         # our event listeners
         self._event_listeners = {
@@ -432,8 +399,7 @@ class Connection(object):
 class ApplicationRunner(object):
     """
     Provides a high-level API that is (mostly) consistent across
-    asyncio and Twisted code. It provides an easy way to configure
-    transports and retry/re-connect options.
+    asyncio and Twisted code.
 
     If you want more control over the reactor and logging, see the
     :class:`Connection` class.
