@@ -391,8 +391,14 @@ class Connection(object):
             try:
                 cb(*args, **kw)
             except Exception as e:
-                print("While running callback {} for {}: {}".format(
-                    cb, evt, e))
+                log.err("While running callback '{}' for '{}': {}".format(
+                    cb, self._event_to_name(evt), e))
+
+    def _event_to_name(self, evt):
+        for (k, v) in self.__class__.__dict__.items():
+            if v == evt:
+                return k
+        return 'unknown'
 
     def _create_session(self, cfg):
         self.session = self._session_factory(cfg)
