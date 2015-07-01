@@ -242,6 +242,9 @@ class Connection(object):
         level)
     """
 
+    # XXX just make these strings for easier debugging? object() makes
+    # it clear you have to use Connection.ERROR etc...
+
     # possible events that we emit; if adding one, add to
     # _event_listeners dict too
     ERROR = object()  #: callback gets Exception instance
@@ -338,16 +341,47 @@ class Connection(object):
         Starts connecting (possibly also re-connecting) and returns a
         Deferred that fires (with None) when we first connect.
         """
-        # XXX for now, all we look at is the first transport! ...
-        self._protocol = yield connect_to(
-            reactor,
-            next(self._transport_gen),
-            self._create_session,
-            self._realm,
-            self._extra,
-        )
-        # should "listen" for connectionLost ... etc. and also add our
-        # own error-handler ...
+        # XXX for now, all we look at is the first transport! ...this
+        # will get fixed with retry-logic
+
+        try:
+            transport_config = next(self._transport_gen)
+            self.protocol = yield connect_to(
+                reactor,
+                transport_config,
+                self._create_session,
+                self._realm,
+                self._extra,
+            )
+
+        except Exception as e:
+            log.err("Error connecting to '{}': {}".format(
+                json.dumps(transport_config), e))
+            # seems redundant but for retry-logic, we can only
+            # Deferred-error on the very first connect_to() attempt
+            self._fire_event(self.ERROR, e)
+            raise
+
+        # "listen" for connectionLost
+        orig = self.protocol.transport.connectionLost
+
+        @wraps(self.protocol.transport.connectionLost)
+        def wrapper(*args, **kw):
+            rtn = orig(*args, **kw)
+            # Failure instance is first arg
+            f = args[0]
+            if self.connect_count == 0:
+                self._fire_event(self.CLOSED, "unreachable")
+            else:
+                if isinstance(f.value, ConnectionDone):
+                    self._fire_event(self.CLOSED, "closed")
+                else:
+                    # XXX javascrpt allows this to return
+                    # "false" to cancel reconnection
+                    self._fire_event(self.CLOSED, "lost")
+            self.protocol = None
+            return rtn
+        self.protocol.transport.connectionLost = wrapper
 
     def _fire_event(self, evt, *args, **kw):
         """
