@@ -122,29 +122,21 @@ def _connect_stream(reactor, cfg, wamp_transport_factory):
 
     else:
         if cfg['type'] == 'unix':
-            if cfg.get('ssl', False):  # 'tls' key absence confirmed in check()
-                raise RuntimeError("No TLS in Unix sockets")
             from twisted.internet.endpoints import UNIXClientEndpoint
             client = UNIXClientEndpoint(reactor, cfg['path'])
 
         elif cfg['type'] == 'tcp':
             if cfg.get('version', 4) == 4:
-                if 'ssl' in cfg and 'tls' in cfg:
-                    raise RuntimeError("'ssl' and 'tls' are mutually exclusive "
-                                       "in endpoint configuration")
-                if cfg.get('ssl', False):
-                    # ssl= should be a "native" Twisted TLS configuration,
-                    # that is a :tx:`twisted.internet.ssl.ContextFactory`
-                    context_factory = cfg['ssl']
+                if 'tls' in cfg:
+                    # XXX FIXME
                     from twisted.internet.endpoints import SSL4ClientEndpoint
                     assert context_factory is not None
-                    client = SSL4ClientEndpoint(reactor, cfg['host'], cfg['port'],
-                                                cfg['ssl'])
+                    client = SSL4ClientEndpoint(reactor, cfg['host'], cfg['port'])
                 else:
                     from twisted.internet.endpoints import TCP4ClientEndpoint
                     client = TCP4ClientEndpoint(reactor, cfg['host'], cfg['port'])
             else:
-                if cfg['ssl']:
+                if 'tls' in cfg:
                     raise RuntimeError("FIXME: TLS over IPv6")
                 from twisted.internet.endpoints import TCP6ClientEndpoint
                 client = TCP6ClientEndpoint(reactor, cfg['host'], cfg['port'])
@@ -168,11 +160,12 @@ def _create_wamp_factory(reactor, cfg, session_factory):
     """
 
     # type in ['websocket', 'rawsocket']
-    create_instance = {
-        "websocket": lambda: WampWebSocketClientFactory(session_factory, url=cfg['url']),
-        "rawsocket": lambda: WampRawSocketClientFactory(session_factory),
-    }
-    return create_instance[cfg['type']]()
+    if cfg['type'] == 'websocket':
+        return WampWebSocketClientFactory(session_factory, url=cfg['url'])
+    elif cfg['type'] == 'rawsocket':
+        return WampRawSocketClientFactory(session_factory)
+    else:
+        raise RuntimeError("Unknown WAMP type '{}'".format(cfg['type']))
 
 
 # XXX THINK move to transport.py?
@@ -190,12 +183,11 @@ def connect_to(reactor, transport_config, session_factory, realm, extra, on_erro
     :param on_error: a callable that takes an Exception, called if we
     get an error connecting
 
-    :returns: Deferred that callbacks with a protocl instance after a
+    :returns: Deferred that callbacks with a protocol instance after a
     connection has been made (not necessarily a WAMP session joined
     yet, however)
     """
 
-    # factory for using ApplicationSession
     def create():
         try:
             session = session_factory(ComponentConfig(realm, extra))
@@ -259,8 +251,9 @@ class ApplicationRunner(_ApplicationRunner):
 
         :returns: None is returned, unless you specify
             ``start_reactor=False`` in which case you get a Deferred
-            that will callback() when a connection is first
-            established (WAMP session not yet joined at this point).
+            that will callback() with a Connection instance when a
+            connection is first established (WAMP session not yet
+            joined at this point).
         """
         from twisted.internet import reactor
         txaio.use_twisted()
@@ -273,7 +266,7 @@ class ApplicationRunner(_ApplicationRunner):
         # Connection(..).connect() and then you can start logging however you want...?
         log.startLogging(sys.stdout)
 
-        self.connection = Connection(
+        connection = Connection(
             session_factory,
             self.transports,
             self.realm,
@@ -285,7 +278,7 @@ class ApplicationRunner(_ApplicationRunner):
                 print("Error:", e)
             if start_reactor:
                 reactor.stop()
-        self.connection.add_event(Connection.ERROR, on_error)
+        connection.add_event(Connection.ERROR, on_error)
 
         # if the user didn't ask us to start the reactor, then they
         # get to deal with any connect errors themselves.
@@ -305,7 +298,7 @@ class ApplicationRunner(_ApplicationRunner):
             connect_error = ErrorCollector()
 
             def startup():
-                d = self.connection.connect(reactor)
+                d = connection.connect(reactor)
                 d.addErrback(connect_error)
             reactor.callWhenRunning(startup)
 
@@ -319,9 +312,9 @@ class ApplicationRunner(_ApplicationRunner):
 
         else:
             # let the caller handle any errors
-            d = self.connection.connect(reactor)
+            d = connection.connect(reactor)
             # we return a Connection instance ("_" will be IProtocol)
-            d.addCallback(lambda _: self.connection)
+            d.addCallback(lambda _: connection)
             return d
 
 
