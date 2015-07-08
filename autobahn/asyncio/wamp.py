@@ -24,7 +24,7 @@
 #
 ###############################################################################
 
-from __future__ import absolute_import
+from __future__ import absolute_import, print_function
 import signal
 
 from autobahn.wamp import protocol
@@ -41,6 +41,10 @@ except ImportError:
 
 import txaio
 txaio.use_asyncio()
+
+from autobahn.asyncio.websocket import WampWebSocketClientFactory
+from autobahn.wamp.runner import _ApplicationRunner, Connection
+
 
 __all__ = (
     'ApplicationSession',
@@ -66,75 +70,148 @@ class ApplicationSessionFactory(protocol.ApplicationSessionFactory):
    """
 
 
-class ApplicationRunner(object):
+def _create_tcp4_stream_transport(loop, cfg, wamp_transport_factory):
     """
-    This class is a convenience tool mainly for development and quick hosting
-    of WAMP application components.
+    Internal helper.
 
-    It can host a WAMP application component in a WAMP-over-WebSocket client
-    connecting to a WAMP router.
+    Creates a TCP4 (possibly with TLS) stream transport.
     """
 
-    def __init__(self, url, realm, extra=None, serializers=None,
-                 debug=False, debug_wamp=False, debug_app=False,
-                 ssl=None, socket_path=None):
-        """
-        :param url: The WebSocket URL of the WAMP router to connect to (e.g. `ws://somehost.com:8090/somepath`)
-        :type url: unicode
+    is_secure, host, port, resource, path, params = parseWsUrl(cfg['url'])
+    ssl = cfg.get('ssl', is_secure)
+    return asyncio.async(loop.create_connection(wamp_transport_factory, host, port, ssl=ssl))
 
-        :param realm: The WAMP realm to join the application session to.
-        :type realm: unicode
 
-        :param extra: Optional extra configuration to forward to the application component.
-        :type extra: dict
+def _create_unix_stream_transport(loop, cfg, wamp_transport_factory):
+    """
+    Internal helper.
 
-        :param serializers: A list of WAMP serializers to use (or None for default serializers).
-           Serializers must implement :class:`autobahn.wamp.interfaces.ISerializer`.
-        :type serializers: list
+    Creates a Unix socket as the stream transport.
+    """
+    return asyncio.async(loop.create_unix_connection(wamp_transport_factory, cfg['path']))
 
-        :param debug: Turn on low-level debugging.
-        :type debug: bool
 
-        :param debug_wamp: Turn on WAMP-level debugging.
-        :type debug_wamp: bool
+def _connect_stream(loop, cfg, wamp_transport_factory):
+    """
+    Internal helper.
 
-        :param debug_app: Turn on app-level debugging.
-        :type debug_app: bool
+    Connects the given wamp_transport_factory to a stream endpoint, as
+    determined from the cfg that's passed in (which should be just the
+    "endpoint" part). Returns Deferred that fires with IProtocol
+    """
 
-        :param ssl: An (optional) SSL context instance or a bool. See
-           the documentation for the `loop.create_connection` asyncio
-           method, to which this value is passed as the ``ssl=``
-           kwarg.
-        :type ssl: :class:`ssl.SSLContext` or bool
-        """
-        self.url = url
-        self.realm = realm
-        self.extra = extra or dict()
-        self.debug = debug
-        self.debug_wamp = debug_wamp
-        self.debug_app = debug_app
-        self.make = None
-        self.serializers = serializers
-        self.ssl = ssl
-        self._socket_path = socket_path
+    if cfg['type'] == 'unix':
+        f = _create_unix_stream_transport(loop, cfg, wamp_transport_factory)
 
-        # configure our internal helpers for creating stream and WAMP
-        # transports
-        self._create_stream_transport = self._create_tcp4_stream_transport
-        # since a None URL is used by autobahn.websocket.protocol.WebSocketClientFactory
-        if url is None:
-            if socket_path is None:
-                raise RuntimeError("Must pass socket_path= kwarg if url is None")
-            self._create_stream_transport = self._create_unix_stream_transport
-        self._create_wamp_factory = self._create_websocket_wamp_factory
+    elif cfg['type'] == 'tcp':
+        if cfg.get('version', 4) == 4:
+            ssl = cfg.get('ssl', None)
+            f = _create_tcp4_stream_transport(loop, cfg, wamp_transport_factory)
+        else:
+            raise RuntimeError("FIXME: IPv6 asyncio")
+    else:
+        raise RuntimeError("Unknown type='{}'".format(cfg['type']))
 
-    def run(self, make):
+    return f
+
+
+def _create_wamp_factory(reactor, cfg, session_factory):
+    """
+    Internal helper.
+
+    This creates the appropriate protocol-factory (that implements
+    tx:`IProtocolFactory <twisted.internet.interfaces.IProtocolFactory>`)
+
+    XXX deal with debug/debug_wamp etcetc.
+    """
+
+    if cfg['type'] == 'rawsocket':
+        raise RuntimeError("No rawsocket/asyncio impl")
+
+    # only other type is websocket
+    return WampWebSocketClientFactory(session_factory, url=cfg['url'])
+
+
+# XXX counter-intuitively (?) this is called via the common Connection
+# class in wamp/runner.py when used internally -- but does need a
+# custom asyncio/twisted implementation because of the different way
+# shutdown works.
+
+
+@asyncio.coroutine
+def connect_to(loop, transport_config, session_factory, realm, extra, on_error=None):
+    """
+    :param transport_config: dict containing valid client transport
+    config (see :mod:`autobahn.wamp.transport`)
+
+    :param session_factory: callable that takes a ComponentConfig and
+    returns a new ISession instance (usually simply your
+    ApplicationSession subclass)
+
+    :param on_error: a callable that takes an Exception, called if we
+    get an error connecting
+
+    :returns: Future that callbacks with a protocl instance after a
+    connection has been made (not necessarily a WAMP session joined
+    yet, however)
+    """
+
+    # factory for using ApplicationSession
+    def create():
+        try:
+            session = session_factory(ComponentConfig(realm, extra))
+            # XXX FIXME session.debug_app = self.debug_app
+            return session
+
+        except Exception as e:
+            if on_error:
+                on_error(e)
+            else:
+                log.err("Exception while creating session: {0}".format(e))
+            raise
+
+    transport_factory = _create_wamp_factory(loop, transport_config, create)
+    #transport, proto = yield _connect_stream(loop, transport_config['endpoint'], transport_factory)
+    f0 = _connect_stream(loop, transport_config['endpoint'], transport_factory)
+
+    # mutate the return value of _connect_stream to be just the
+    # protocol so that the API of connect_to is the "same" for Twisted
+    # and asyncio (although the protocol returned is a native Twisted
+    # or asyncio object).
+    # both provide protocol.transport to get the transport
+
+    # XXX is there a better idiom for this in asyncio?
+    f1 = asyncio.Future()
+    def return_proto(result):
+        try:
+            transport, protocol = result.result()
+            transport.connectionLost = protocol.connection_lost
+            f1.set_result(protocol)
+        except Exception as e:
+            f1.set_exception(e)
+    f0.add_done_callback(return_proto)
+    return f1
+
+
+class ApplicationRunner(_ApplicationRunner):
+    """
+    Provides a high-level API that is (mostly) consistent across
+    asyncio and Twisted code.
+
+    If you want more control over the reactor and logging, see the
+    :class:`autobahn.wamp.runner.Connection` class.
+
+    If you need lower-level control than that, see :meth:`connect_to`
+    which attempts a single connection to a single transport.
+    """
+
+    def run(self, session_factory, **kw):
         """
         Run the application component.
 
-        :param make: A factory that produces instances of :class:`autobahn.asyncio.wamp.ApplicationSession`
+        :param session_factory: A factory that produces instances of :class:`autobahn.asyncio.wamp.ApplicationSession`
            when called with an instance of :class:`autobahn.wamp.types.ComponentConfig`.
-        :type make: callable
+        :type session_factory: callable
 
         :param socket_path: If you passed None as the URL, you must
             pass socket_path= to tell ApplicationRunner where your
@@ -150,11 +227,20 @@ class ApplicationRunner(object):
         # want to shut down nicely on TERM
         loop.add_signal_handler(signal.SIGTERM, loop.stop)
 
-        # create our connection; this is some WAMP dialect over an
-        # underlying stream transport.
-        transport_factory = self._create_wamp_factory(loop, make)
-        d = self._create_stream_transport(loop, transport_factory)
-        (transport, protocol) = loop.run_until_complete(d)
+        self.connection = Connection(
+            session_factory,
+            self.transports,
+            self.realm,
+            self.extra,
+        )
+
+        def on_error(e):
+            if e is not None:
+                print("Error:", e)
+        self.connection.add_event(Connection.ERROR, on_error)
+
+        # synchronously start the protocol (retry logic to come)
+        protocol = loop.run_until_complete(self.connection.connect(loop))
 
         # now enter the asyncio event loop
         try:
@@ -165,64 +251,6 @@ class ApplicationRunner(object):
             pass
         # give Goodbye message a chance to go through, if we still
         # have an active session
-        if protocol._session:
+        if hasattr(protocol, '_session') and protocol._session is not None:
             loop.run_until_complete(protocol._session.leave())
         loop.close()
-
-
-    def _create_tcp4_stream_transport(self, loop, wamp_transport_factory):
-        """
-        Internal helper.
-
-        Creates a TCP4 (possibly with TLS) stream transport.
-        """
-
-        isSecure, host, port, resource, path, params = parseWsUrl(self.url)
-
-        if self.ssl is None:
-            ssl = isSecure
-        else:
-            if self.ssl and not isSecure:
-                raise RuntimeError(
-                    'ssl argument value passed to %s conflicts with the "ws:" '
-                    'prefix of the url argument. Did you mean to use "wss:"?' %
-                    self.__class__.__name__)
-            ssl = self.ssl
-
-        coro = loop.create_connection(wamp_transport_factory, host, port, ssl=ssl)
-        return asyncio.async(coro)
-
-
-    def _create_unix_stream_transport(self, loop, wamp_transport_factory):
-        """
-        Internal helper.
-
-        Creates a Unix socket as the stream transport.
-        """
-
-        url = None  # see autobahn.websocket.protocol.WebSocketClientFactory
-
-        if self.ssl is not None:
-            raise RuntimeError('ssl= argument inconsistent with Unix-domain sockets')
-
-        coro = loop.create_unix_connection(wamp_transport_factory, self._socket_path)
-        return asyncio.async(coro)
-
-
-    def _create_websocket_wamp_factory(self, loop, session_factory, **kw):
-        # factory for using ApplicationSession
-        def create():
-            cfg = ComponentConfig(self.realm, self.extra)
-            try:
-                session = session_factory(cfg)
-            except Exception as e:
-                print(e)
-                asyncio.get_event_loop().stop()
-            else:
-                session.debug_app = self.debug_app
-                return session
-
-        return WampWebSocketClientFactory(
-            create, url=self.url, serializers=self.serializers,
-            debug=self.debug, debug_wamp=self.debug_wamp
-        )
