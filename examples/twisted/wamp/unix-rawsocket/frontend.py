@@ -116,9 +116,12 @@ def main(reactor):
             yield sleep(1)
             print("connection:", connection)
             if connection.session:
+                # we're doing this so there's "some" traffic so you can
+                # hard-kill connections and see them fail fast
                 connection.session.publish('foo')
 
     print("exiting main")
+
 
 if False:
     # "normal" usage
@@ -127,6 +130,6 @@ if False:
     print("exiting.")
 
 else:
-    # "Twisted native" and other "lower-leve" usage
+    # "Twisted native" and other "lower-level" usage
     react(main)
     print("exiting.")
