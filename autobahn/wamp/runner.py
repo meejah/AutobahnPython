@@ -183,7 +183,6 @@ class Connection(object):
                 orig = self.protocol.transport.connectionLost
             else:
                 orig = self.protocol.connection_lost
-            print("KAZING", orig)
 
             @wraps(self.protocol.transport.connectionLost)
             def wrapper(*args, **kw):
@@ -192,6 +191,7 @@ class Connection(object):
                 if txaio.using_twisted:
                     # first arg is a Failure
                     exc = args[0].value
+                    from twisted.internet.error import ConnectionDone
                     if isinstance(exc, ConnectionDone):
                         exc = None
                 else:
@@ -221,13 +221,15 @@ class Connection(object):
         """
         Internal helper. MUST NOT throw Exceptions
         """
-        print("FIRE", self._event_to_name(evt), args)
+        # print("FIRE", self._event_to_name(evt), args)
         for cb in self._event_listeners[evt]:
             try:
                 cb(*args, **kw)
             except Exception as e:
-                log.err("While running callback '{}' for '{}': {}".format(
+                print("While running callback '{}' for '{}': {}".format(
                     cb, self._event_to_name(evt), e))
+                import traceback
+                traceback.print_exc()
 
     def _event_to_name(self, evt):
         for (k, v) in self.__class__.__dict__.items():
