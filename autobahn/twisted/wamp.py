@@ -160,12 +160,13 @@ def _create_wamp_factory(reactor, cfg, session_factory):
     """
 
     # type in ['websocket', 'rawsocket']
-    if cfg['type'] == 'websocket':
+    kind = cfg.get('type', 'websocket')
+    if kind == 'websocket':
         return WampWebSocketClientFactory(session_factory, url=cfg['url'])
-    elif cfg['type'] == 'rawsocket':
+    elif kind == 'rawsocket':
         return WampRawSocketClientFactory(session_factory)
     else:
-        raise RuntimeError("Unknown WAMP type '{}'".format(cfg['type']))
+        raise RuntimeError("Unknown WAMP type '{}'".format(kind))
 
 
 # XXX THINK move to transport.py?
@@ -202,7 +203,13 @@ def connect_to(reactor, transport_config, session_factory, realm, extra, on_erro
             raise
 
     transport_factory = _create_wamp_factory(reactor, transport_config, create)
-    proto = yield _connect_stream(reactor, transport_config['endpoint'], transport_factory)
+
+    if 'endpoint' in transport_config:
+        endpoint = transport_config['endpoint']
+    else:
+        _, host, port, _, _, _ = parseWsUrl(transport_config['url'])
+        endpoint = dict(host=host, port=port, type='tcp', version=4)
+    proto = yield _connect_stream(reactor, endpoint, transport_factory)
 
     # as the reactor/event-loop shuts down, we wish to wait until we've sent
     # out our "Goodbye" message; leave() returns a Deferred that
@@ -298,7 +305,7 @@ class ApplicationRunner(_ApplicationRunner):
             connect_error = ErrorCollector()
 
             def startup():
-                d = connection.connect(reactor)
+                d = connection.open(reactor)
                 d.addErrback(connect_error)
             reactor.callWhenRunning(startup)
 
