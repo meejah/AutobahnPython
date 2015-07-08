@@ -25,7 +25,6 @@
 ###############################################################################
 
 from collections import deque
-import logging
 
 from autobahn.wamp import websocket
 from autobahn.websocket import protocol
@@ -71,8 +70,6 @@ class WebSocketAdapterProtocol(asyncio.Protocol):
     """
     Adapter class for asyncio-based WebSocket client and server protocols.
     """
-
-    logger = logging.getLogger('wamp.websocket')
 
     def connection_made(self, transport):
         self.transport = transport
