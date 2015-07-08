@@ -49,7 +49,9 @@ from autobahn.wamp.runner import _ApplicationRunner, Connection
 __all__ = (
     'ApplicationSession',
     'ApplicationSessionFactory',
-    'ApplicationRunner'
+    'ApplicationRunner',
+    'Connection',
+    'connect_to',
 )
 
 
@@ -151,12 +153,11 @@ def connect_to(loop, transport_config, session_factory, realm, extra, on_error=N
     :param on_error: a callable that takes an Exception, called if we
     get an error connecting
 
-    :returns: Future that callbacks with a protocl instance after a
+    :returns: Future that callbacks with a protocol instance after a
     connection has been made (not necessarily a WAMP session joined
     yet, however)
     """
 
-    # factory for using ApplicationSession
     def create():
         try:
             session = session_factory(ComponentConfig(realm, extra))
@@ -171,7 +172,6 @@ def connect_to(loop, transport_config, session_factory, realm, extra, on_error=N
             raise
 
     transport_factory = _create_wamp_factory(loop, transport_config, create)
-    #transport, proto = yield _connect_stream(loop, transport_config['endpoint'], transport_factory)
     f0 = _connect_stream(loop, transport_config['endpoint'], transport_factory)
 
     # mutate the return value of _connect_stream to be just the
@@ -205,18 +205,13 @@ class ApplicationRunner(_ApplicationRunner):
     which attempts a single connection to a single transport.
     """
 
-    def run(self, session_factory, **kw):
+    def run(self, session_factory):
         """
         Run the application component.
 
         :param session_factory: A factory that produces instances of :class:`autobahn.asyncio.wamp.ApplicationSession`
            when called with an instance of :class:`autobahn.wamp.types.ComponentConfig`.
         :type session_factory: callable
-
-        :param socket_path: If you passed None as the URL, you must
-            pass socket_path= to tell ApplicationRunner where your
-            unix-socket is.
-        :type socket_path: unicode
         """
 
         # set up the event-loop and ensure txaio is using the same one
@@ -240,7 +235,7 @@ class ApplicationRunner(_ApplicationRunner):
         self.connection.add_event(Connection.ERROR, on_error)
 
         # synchronously start the protocol (retry logic to come)
-        protocol = loop.run_until_complete(self.connection.connect(loop))
+        protocol = loop.run_until_complete(self.connection.open(loop))
 
         # now enter the asyncio event loop
         try:
@@ -249,6 +244,7 @@ class ApplicationRunner(_ApplicationRunner):
             # wait until we send Goodbye if user hit ctrl-c
             # (done outside this except so SIGTERM gets the same handling)
             pass
+
         # give Goodbye message a chance to go through, if we still
         # have an active session
         if hasattr(protocol, '_session') and protocol._session is not None:

@@ -52,11 +52,11 @@ txaio.use_twisted()
 
 
 __all__ = [
-    'Connection',
-    'connect_to',
     'ApplicationSession',
     'ApplicationSessionFactory',
     'ApplicationRunner',
+    'Connection',
+    'connect_to',
     'Application',
     'Service',
 ]

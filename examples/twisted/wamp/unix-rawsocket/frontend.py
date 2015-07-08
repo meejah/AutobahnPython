@@ -84,7 +84,7 @@ def main(reactor):
         # "advanced" usage, passing "start_reactor=False" so we get access to the connection object
         connection = yield runner.run(ClientSession, start_reactor=False)
 
-    elif False:
+    elif True:
         # ...OR should just eliminate ^ start_reactor= and "make" you use
         # the Connection API directly if you want a Connection instance? like this:
         connection = Connection(ClientSession, random_transports(), u"realm1", extra=None)

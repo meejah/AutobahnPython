@@ -26,7 +26,7 @@ class ClientSession(ApplicationSession):
             self.leave()
 
 #    def onClose(self, *args, **kw):
-#        raise RuntimeError("FOOOOO")
+#        raise RuntimeError("Boom")
 
     def subscription(self, *args, **kw):
         print("sub:", args, kw)
