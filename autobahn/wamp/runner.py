@@ -3,7 +3,7 @@ from __future__ import absolute_import
 ## XXX trying to factor out common ApplicationRunner stuff for
 ## asyncio/twisted
 
-from types import StringType
+from types import StringType, ListType
 from functools import wraps
 import json
 import six
@@ -156,6 +156,8 @@ class Connection(object):
             raise RuntimeError("Already connecting.")
 
         transport_config = next(self._transport_gen)
+        transport.check(transport_config, listen=False)
+
         self._connecting = txaio.as_future(
             self._connect_to, loop, transport_config,
             self._create_session, self._realm, self._extra,
@@ -357,10 +359,13 @@ class _ApplicationRunner(object):
             # XXX shall we also handle "passing a single dict" instead of 1-entry list?
             self.transports = url_or_transports
 
-        # validate the transports we have
-        for cfg in self.transports:
-            transport.check(cfg, listen=False)
-            cfg['endpoint']['ssl'] = ssl  # HACK FIXME
+        # validate the transports we have ... but not if they're an
+        # iterable. this gives feedback right away for invalid
+        # transports if you passed a list, but lets you pass a
+        # generator etc. instead if you want
+        if type(self.transports) is ListType:
+            for cfg in self.transports:
+                transport.check(cfg, listen=False)
 
     def run(self, session_factory, **kw):
         raise RuntimeError("Subclass should override .run()")
