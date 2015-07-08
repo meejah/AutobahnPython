@@ -239,6 +239,13 @@ class ApplicationRunner(_ApplicationRunner):
     which attempts a single connection to a single transport.
     """
 
+    # XXX maybe we want to change this since right now there's not
+    # really a good way to start multiple sessions with
+    # ApplicationRunner and then what's the point, really? (i.e. just
+    # use Connection itself). Could do:
+    #  - have a "add_session" that takes session_factory, creates a Connection instance, adds to internal list
+    #  - run() takes no args and runs all Connections in our list (i.e. get rid of start_reactor=False)
+    #  - add_session could return the Connection instance, so if caller wants it they can have it
     def run(self, session_factory, start_reactor=True):
         """
         Run an application component.
@@ -270,7 +277,7 @@ class ApplicationRunner(_ApplicationRunner):
         # not... or provide a "start_logging=True" kwarg?
 
         # XXX I guess the "experts" interface is:
-        # Connection(..).connect() and then you can start logging however you want...?
+        # Connection(..).open() and then you can start logging however you want...?
         log.startLogging(sys.stdout)
 
         connection = Connection(
@@ -319,7 +326,7 @@ class ApplicationRunner(_ApplicationRunner):
 
         else:
             # let the caller handle any errors
-            d = connection.connect(reactor)
+            d = connection.open(reactor)
             # we return a Connection instance ("_" will be IProtocol)
             d.addCallback(lambda _: connection)
             return d
