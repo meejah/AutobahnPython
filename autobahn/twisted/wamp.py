@@ -107,6 +107,10 @@ def _connect_stream(reactor, cfg, wamp_transport_factory):
     "endpoint" part). Returns Deferred that fires with IProtocol
     """
 
+    # XXX probably want to move/port:
+    # crossbar.twisted.endpoint.create_connecting_endpoint_from_config
+    # into here instead; supports 'tls' option properly...
+
     if isinstance(cfg, six.text_type):
         client = clientFromString(cfg)
 
