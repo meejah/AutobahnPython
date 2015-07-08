@@ -34,7 +34,6 @@ import twisted.internet.protocol
 from twisted.internet.defer import maybeDeferred
 from twisted.python import log
 from twisted.internet.interfaces import ITransport
-from twisted.logger import Logger
 
 from autobahn.wamp import websocket
 from autobahn.websocket import protocol
@@ -75,8 +74,6 @@ class WebSocketAdapterProtocol(twisted.internet.protocol.Protocol):
     """
     Adapter class for Twisted WebSocket client and server protocols.
     """
-
-    logger = Logger()
 
     def connectionMade(self):
         # the peer we are connected to
