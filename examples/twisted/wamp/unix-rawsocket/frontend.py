@@ -5,7 +5,7 @@ import random
 from twisted.internet.defer import inlineCallbacks, DeferredList, Deferred
 from twisted.internet.task import react
 
-from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner, Connection
+from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner, Connection, connect_to
 from autobahn.twisted.util import sleep
 
 
@@ -68,43 +68,65 @@ def main(reactor):
             # print("Returning transport:", t)
             yield t
 
-    # single, good unix transport
-    #runner = ApplicationRunner([rawsocket_unix_transport], u"realm1")
-
-    # single, good tcp+websocket transport
-    #runner = ApplicationRunner([websocket_tcp_transport], u"realm1")
-
-    # single, bad transport (will never succeed)
-    #runner = ApplicationRunner([bad_transport], u"realm1")
-
     if False:
         # use generator/iterable as infinite transport list
         runner = ApplicationRunner(random_transports(), u"realm1")
 
+        # single, good unix transport
+        #runner = ApplicationRunner([rawsocket_unix_transport], u"realm1")
+
+        # single, good tcp+websocket transport
+        #runner = ApplicationRunner([websocket_tcp_transport], u"realm1")
+
+        # single, bad transport (will never succeed)
+        #runner = ApplicationRunner([bad_transport], u"realm1")
+
         # "advanced" usage, passing "start_reactor=False" so we get access to the connection object
         connection = yield runner.run(ClientSession, start_reactor=False)
+
+    elif False:
+        # ...OR should just eliminate ^ start_reactor= and "make" you use
+        # the Connection API directly if you want a Connection instance? like this:
+        connection = Connection(ClientSession, random_transports(), u"realm1", extra=None)
+        yield connection.open(reactor)
+
     else:
-        # ...OR should just "make" you use the Connection API directly?
-        connection = Connection(ClientSession, random_transports(), u"realm1", None)
-        yield connection.connect(reactor)
+        # lowest-level API, connecting a single transport, yielding an IProtocol
+        # XXX consider making this one private for now? i.e. "_connect_to"
+        connection = None
+        proto = yield connect_to(reactor, rawsocket_unix_transport, ClientSession, u"realm1", None)
+        print("Protocol", proto)
+        yield sleep(10)
+        print("done.")
 
-    print("Connection!", connection)
-    connection.add_event(Connection.CREATE_SESSION, lambda s: print("new session:", s))
-    connection.add_event(Connection.SESSION_LEAVE, lambda s: print("session gone:", s))
-    connection.add_event(Connection.CONNECTED, lambda p: print("protocol connected:", p))
-    connection.add_event(Connection.ERROR, lambda e: print("connection error:", e))
+    if connection is not None:
+        print("Connection!", connection)
+        connection.add_event(Connection.CREATE_SESSION, lambda s: print("new session:", s))
+        connection.add_event(Connection.SESSION_LEAVE, lambda s: print("session gone:", s))
+        connection.add_event(Connection.CONNECTED, lambda p: print("protocol connected:", p))
+        connection.add_event(Connection.ERROR, lambda e: print("connection error:", e))
 
-    def shutdown(reason):
-        print("shutdown because '{}'".format(reason))
-        #reactor.stop()
-    connection.add_event(Connection.CLOSED, shutdown)
+        stopping = []
+        def shutdown(reason):
+            print("shutdown because '{}'".format(reason))
+            stopping.append(False)
+        connection.add_event(Connection.CLOSED, shutdown)
 
-    while True:
-        yield sleep(1)
-        print("connection:", connection)
-        if connection.session:
-            connection.session.publish('foo')
+        while not stopping:
+            yield sleep(1)
+            print("connection:", connection)
+            if connection.session:
+                connection.session.publish('foo')
+
     print("exiting main")
 
-react(main)
-print("exiting.")
+if False:
+    # "normal" usage
+    runner = ApplicationRunner([dict(url="ws://127.0.0.1:8081/ws")], u"realm1")
+    runner.run(ClientSession)
+    print("exiting.")
+
+else:
+    # "Twisted native" and other "lower-leve" usage
+    react(main)
+    print("exiting.")
