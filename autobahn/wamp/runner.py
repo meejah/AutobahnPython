@@ -19,19 +19,23 @@ class Connection(object):
 
      - a WAMP protocol is "websocket" or "rawsocket"
      - the transport is TCP4, TCP6 (with or without TLS) or Unix socket.
+     - both ``.protocol`` and ``.transport`` are "native"
+       objects. That is, if you're using Twisted ``.protocol`` will be
+       an IProtocol whereas it will be a BaseProtocol subclass under
+       asyncio
 
-    This handles the lifecycles of the underlying transport/protocol
+    This class handles the lifecycles of the underlying transport/protocol
     pair, providing notifications of transitions.
 
     XXX make docs generic between tx/asyncio if this is generic
 
     If :class:`ApplicationRunner <autobahn.twisted.wamp.ApplicationRunner`
     API is too high-level for your use-case, Connection lets you set
-    up your own Twisted logging, call ``reactor.run()`` yourself,
+    up your own logging, call ``reactor.run()`` yourself,
     etc. ApplicationRunner in fact simply uses Connection internally.
 
     :ivar protocol: current protocol instance, or ``None``
-    :type protocol: tx:`twisted.internet.interfaces.IProtocol`
+    :type protocol: tx:`twisted.internet.interfaces.IProtocol` or ``BaseProtocol`` subclass
 
     :ivar session: current ApplicationSession instance, or ``None``
     :type session: class:`autobahn.wamp.protocol.ApplicationSession` subclass
@@ -71,7 +75,7 @@ class Connection(object):
             dict().
         """
 
-        # state (also part of the API)
+        # public state (part of the API)
         self.protocol = None
         self.session = None
         self.connect_count = 0
@@ -158,6 +162,7 @@ class Connection(object):
         transport_config = next(self._transport_gen)
         transport.check(transport_config, listen=False)
 
+        self.attempt_count += 1
         self._connecting = txaio.as_future(
             self._connect_to, loop, transport_config,
             self._create_session, self._realm, self._extra,
@@ -180,13 +185,14 @@ class Connection(object):
             # listen to on transports, that has the same return value
             # for twisted/asyncio (maybe just "closed" or "lost"?)
             # ... or this whole "shared impl for Connection" approach is flawed?
+            # XXX basically: get rid of framework-specific "ifdef"s from here
 
             if txaio.using_twisted:
                 orig = self.protocol.transport.connectionLost
             else:
                 orig = self.protocol.connection_lost
 
-            @wraps(self.protocol.transport.connectionLost)
+            @wraps(orig)
             def wrapper(*args, **kw):
                 rtn = orig(*args, **kw)
 
