@@ -4,58 +4,14 @@ from __future__ import absolute_import
 ## asyncio/twisted
 
 from types import StringType
+from functools import wraps
+import json
 import six
+import txaio
 
 from autobahn.wamp import transport
 
-
-# XXX maybe more sense in wamp.transport.connect_to?
-@inlineCallbacks
-def connect_to(loop, transport_config, session_factory, realm, extra, on_error=None):
-    """
-    :param transport_config: dict containing valid client transport
-    config (see :mod:`autobahn.wamp.transport`)
-
-    :param session_factory: callable that takes a ComponentConfig and
-    returns a new ISession instance (usually simply your
-    ApplicationSession subclass)
-
-    :param on_error: a callable that takes an Exception, called if we
-    get an error connecting
-
-    :returns: Deferred that callbacks with ... "Connection" instance?
-    Nothing? .. after a connection has been made (not necessarily a
-    WAMP session joined yet, however)
-    """
-
-    # factory for using ApplicationSession
-    def create():
-        try:
-            session = session_factory(ComponentConfig(realm, extra))
-            # XXX FIXME session.debug_app = self.debug_app
-            return session
-
-        except Exception as e:
-            if on_error:
-                on_error(e)
-            else:
-                log.err("Exception while creating session: {0}".format(e))
-            raise
-
-    transport_factory = _create_wamp_factory(loop, transport_config, create)
-    proto = yield _connect_stream(loop, transport_config['endpoint'], transport_factory)
-
-    # as the reactor/event-loop shuts down, we wish to wait until we've sent
-    # out our "Goodbye" message; leave() returns a Deferred that
-    # fires when the transport gets to STATE_CLOSED
-    def cleanup():
-        if hasattr(proto, '_session') and proto._session is not None:
-            return proto._session.leave()
-    reactor.addSystemEventTrigger('before', 'shutdown', cleanup)
-
-    returnValue(proto)
-
-
+# XXX move to transport?
 class Connection(object):
     """
     This represents configuration of a protocol and transport to make
@@ -66,6 +22,8 @@ class Connection(object):
 
     This handles the lifecycles of the underlying transport/protocol
     pair, providing notifications of transitions.
+
+    XXX make docs generic between tx/asyncio if this is generic
 
     If :class:`ApplicationRunner <autobahn.twisted.wamp.ApplicationRunner`
     API is too high-level for your use-case, Connection lets you set
@@ -84,7 +42,7 @@ class Connection(object):
     """
 
     # XXX just make these strings for easier debugging? object() makes
-    # it clear you have to use Connection.ERROR etc...
+    # it clear you have to use Connection.ERROR etc though...
 
     # possible events that we emit; if adding one, add to
     # _event_listeners dict too
@@ -123,6 +81,7 @@ class Connection(object):
         self._session_factory = session_factory
         self._realm = realm
         self._extra = extra
+        self._connecting = None  # a Deferred/Future while connecting
 
         # our event listeners
         self._event_listeners = {
@@ -133,11 +92,19 @@ class Connection(object):
             self.CLOSED: [],
         }
 
+        # generate a new transport to try
         def transport_gen():
             while True:
                 for tr in transports:
                     yield tr
         self._transport_gen = transport_gen()
+
+        # ifdef which connect_to we need
+        if txaio.using_twisted:
+            from autobahn.twisted.wamp import connect_to
+        else:
+            from autobahn.asyncio.wamp import connect_to
+        self._connect_to = connect_to
 
     def add_event(self, event_type, cb):
         """
@@ -176,58 +143,85 @@ class Connection(object):
 
     # XXX actually, just this thing needs custom implementation for asyncio vs. Twisted?
 
-    @inlineCallbacks
+
     def connect(self, loop):
         """
         Starts connecting (possibly also re-connecting) and returns a
-        Deferred that fires (with None) when we first connect.
+        Deferred/Future that fires (with None) when we first connect.
         """
         # XXX for now, all we look at is the first transport! ...this
         # will get fixed with retry-logic
 
-        try:
-            transport_config = next(self._transport_gen)
-            self.protocol = yield connect_to(
-                loop,
-                transport_config,
-                self._create_session,
-                self._realm,
-                self._extra,
-            )
+        if self._connecting is not None:
+            raise RuntimeError("Already connecting.")
 
-        except Exception as e:
-            log.err("Error connecting to '{}': {}".format(
-                json.dumps(transport_config), e))
+        transport_config = next(self._transport_gen)
+        self._connecting = txaio.as_future(
+            self._connect_to, loop, transport_config,
+            self._create_session, self._realm, self._extra,
+        )
+
+        def on_error(fail):
+            print("Error connecting to '{}': {}".format(
+                json.dumps(transport_config), fail))
             # seems redundant but for retry-logic, we can only
             # Deferred-error on the very first connect_to() attempt
-            self._fire_event(self.ERROR, e)
-            raise
+            self._fire_event(self.ERROR, fail)
+            return fail
 
-        # "listen" for connectionLost
-        orig = self.protocol.transport.connectionLost
+        def on_success(proto):
+            self.protocol = proto
 
-        @wraps(self.protocol.transport.connectionLost)
-        def wrapper(*args, **kw):
-            rtn = orig(*args, **kw)
-            # Failure instance is first arg
-            f = args[0]
-            if self.connect_count == 0:
-                self._fire_event(self.CLOSED, "unreachable")
+            # "listen" for connectionLost
+
+            # XXX this smells ... bad. Perhaps adding something we can
+            # listen to on transports, that has the same return value
+            # for twisted/asyncio (maybe just "closed" or "lost"?)
+            # ... or this whole "shared impl for Connection" approach is flawed?
+
+            if txaio.using_twisted:
+                orig = self.protocol.transport.connectionLost
             else:
-                if isinstance(f.value, ConnectionDone):
-                    self._fire_event(self.CLOSED, "closed")
+                orig = self.protocol.connection_lost
+            print("KAZING", orig)
+
+            @wraps(self.protocol.transport.connectionLost)
+            def wrapper(*args, **kw):
+                rtn = orig(*args, **kw)
+
+                if txaio.using_twisted:
+                    # first arg is a Failure
+                    exc = args[0].value
+                    if isinstance(exc, ConnectionDone):
+                        exc = None
                 else:
-                    # XXX javascrpt allows this to return
-                    # "false" to cancel reconnection
-                    self._fire_event(self.CLOSED, "lost")
-            self.protocol = None
-            return rtn
-        self.protocol.transport.connectionLost = wrapper
+                    # first arg is the Exception, or None if clean
+                    exc = args[0]
+
+                if self.connect_count == 0:
+                    self._fire_event(self.CLOSED, "unreachable")
+                else:
+                    if exc is None:
+                        self._fire_event(self.CLOSED, "closed")
+                    else:
+                        # XXX javascrpt allows this to return
+                        # "false" to cancel reconnection
+                        self._fire_event(self.CLOSED, "lost")
+                self.protocol = None
+                return rtn
+            if txaio.using_twisted:
+                self.protocol.transport.connectionLost = wrapper
+            else:
+                self.protocol.connection_lost = wrapper
+
+        txaio.add_callbacks(self._connecting, on_success, on_error)
+        return self._connecting
 
     def _fire_event(self, evt, *args, **kw):
         """
         Internal helper. MUST NOT throw Exceptions
         """
+        print("FIRE", self._event_to_name(evt), args)
         for cb in self._event_listeners[evt]:
             try:
                 cb(*args, **kw)
