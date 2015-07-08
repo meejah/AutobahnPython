@@ -36,6 +36,7 @@ import six
 import txaio
 
 from autobahn.wamp import transport
+from autobahn.wamp.exception import TransportLost
 
 # XXX move to transport?
 class Connection(object):
@@ -174,7 +175,7 @@ class Connection(object):
     # XXX actually, just this thing needs custom implementation for asyncio vs. Twisted?
 
 
-    def connect(self, loop):
+    def open(self, loop):
         """
         Starts connecting (possibly also re-connecting) and returns a
         Deferred/Future that fires (with None) when we first connect.
@@ -250,6 +251,31 @@ class Connection(object):
 
         txaio.add_callbacks(self._connecting, on_success, on_error)
         return self._connecting
+
+    def close(self):
+        """
+        Nicely close the session and/or transport. Returns a
+        Deferred/Future that callbacks (with None) when we've closed
+        down. throws RuntimeError if the connection is already closed.
+        """
+
+        if self.session is not None:
+            return self.session.leave()
+        elif self.protocol:
+            try:
+                if txaio.using_twisted:
+                    self.protocol.close()
+                else:
+                    self.protocol.lost_connection()
+                return self.protocol.is_closed
+            except TransportLost:
+                # mimicing JS API, but...
+                # XXX is this really an error? could just ignore it ...
+                # or should provide ".is_open()" so you can avoid errors :/
+                #raise RuntimeError('Connection already closed.')
+                f = txaio.create_future()
+                txaio.resolve(f, None)
+                return f
 
     def _fire_event(self, evt, *args, **kw):
         """
