@@ -26,6 +26,9 @@
 
 from __future__ import absolute_import
 
+from autobahn.websocket.protocol import parseWsUrl
+
+
 def check(transport, listen=False):
     """
     :param listen: True if this transport will be used for listening
@@ -50,6 +53,12 @@ def check(transport, listen=False):
 
     if kind == 'websocket':
         assert 'url' in transport
+        is_secure, host, port, resource, path, params = parseWsUrl(transport['url'])
+        if not is_secure and ('tls' in transport or 'ssl' in transport):
+            raise RuntimeError(
+                '"ssl" or "tls" key conflicts with the "ws:" prefix of the url'
+                ' argument. Did you mean to use "wss:"?'
+            )
 
     if 'endpoint' in transport:
         return check_endpoint(transport['endpoint'], listen=listen)
@@ -115,6 +124,11 @@ def check_endpoint(endpoint, listen=False):
         for x in ['host', 'port', 'interface', 'tls', 'shared', 'version']:
             assert x not in endpoint
         assert 'path' in endpoint
+        if endpoint.get('ssl', False) or 'tls' in endpoint:
+            raise RuntimeError("No TLS in Unix sockets")
+        if 'ssl' in endpoint and 'tls' in endpoint:
+            raise RuntimeError("'ssl' and 'tls' are mutually exclusive "
+                                   "in endpoint configuration")
 
     timeout = float(endpoint.get('timeout', 10))
     assert timeout > 0.0
