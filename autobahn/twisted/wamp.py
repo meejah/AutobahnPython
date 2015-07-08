@@ -118,7 +118,7 @@ def _connect_stream(reactor, cfg, wamp_transport_factory):
 
     else:
         if cfg['type'] == 'unix':
-            if cfg['ssl']:  # 'tls' key absence confirmed in check()
+            if cfg.get('ssl', False):  # 'tls' key absence confirmed in check()
                 raise RuntimeError("No TLS in Unix sockets")
             from twisted.internet.endpoints import UNIXClientEndpoint
             client = UNIXClientEndpoint(reactor, cfg['path'])
@@ -128,7 +128,7 @@ def _connect_stream(reactor, cfg, wamp_transport_factory):
                 if 'ssl' in cfg and 'tls' in cfg:
                     raise RuntimeError("'ssl' and 'tls' are mutually exclusive "
                                        "in endpoint configuration")
-                if cfg['ssl']:
+                if cfg.get('ssl', False):
                     # ssl= should be a "native" Twisted TLS configuration,
                     # that is a :tx:`twisted.internet.ssl.ContextFactory`
                     context_factory = cfg['ssl']
@@ -147,7 +147,6 @@ def _connect_stream(reactor, cfg, wamp_transport_factory):
         else:
             raise RuntimeError("Unknown type='{}'".format(cfg['type']))
 
-    print("Connecting", client)
     return client.connect(wamp_transport_factory)
 
 
