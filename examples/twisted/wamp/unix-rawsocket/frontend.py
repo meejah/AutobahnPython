@@ -26,9 +26,6 @@ class ClientSession(ApplicationSession):
             print("leave()-ing")
             self.leave()
 
-#    def onClose(self, *args, **kw):
-#        raise RuntimeError("FOOOOO")
-
     def subscription(self, *args, **kw):
         print("sub:", args, kw)
 
@@ -64,13 +61,6 @@ def main(reactor):
         }
     }
 
-    retry = dict(
-        initial_retry_delay=1,
-        retry_growth_rate=2,
-        max_retries=2,  # change to 1 for an error
-        retry_on_unreachable=True,
-    )
-
     transports = [bad_transport, rawsocket_unix_transport, websocket_tcp_transport, {"just": "completely bogus"}]
     def random_transports():
         while True:
@@ -78,30 +68,26 @@ def main(reactor):
             # print("Returning transport:", t)
             yield t
 
-    if False: # retry
-        connection = yield runner.run(ClientSession, start_reactor=False, retry=retry)
-        runner = ApplicationRunner([bad_transport, bad_transport, rawsocket_unix_transport],#, bad_transport, bad_transport],
-                                   u"realm1")
-    else:
-        # single, good unix transport
-        #runner = ApplicationRunner([rawsocket_unix_transport], u"realm1")
+    # single, good unix transport
+    #runner = ApplicationRunner([rawsocket_unix_transport], u"realm1")
 
-        # single, good tcp+websocket transport
-        #runner = ApplicationRunner([websocket_tcp_transport], u"realm1")
+    # single, good tcp+websocket transport
+    #runner = ApplicationRunner([websocket_tcp_transport], u"realm1")
 
-        # single, bad transport (will never succeed)
-        #runner = ApplicationRunner([bad_transport], u"realm1")
+    # single, bad transport (will never succeed)
+    #runner = ApplicationRunner([bad_transport], u"realm1")
 
+    if False:
         # use generator/iterable as infinite transport list
         runner = ApplicationRunner(random_transports(), u"realm1")
 
-        # hmm or should we just return None from run() and access connection
-        # via runner.connection always?
-
+        # "advanced" usage, passing "start_reactor=False" so we get access to the connection object
         connection = yield runner.run(ClientSession, start_reactor=False)
-        assert connection is runner.connection
+    else:
+        # ...OR should just "make" you use the Connection API directly?
+        connection = Connection(ClientSession, random_transports(), u"realm1", None)
+        yield connection.connect(reactor)
 
-    # "advanced" usage, passing "start_reactor=False" so we get access to the connection object
     print("Connection!", connection)
     connection.add_event(Connection.CREATE_SESSION, lambda s: print("new session:", s))
     connection.add_event(Connection.SESSION_LEAVE, lambda s: print("session gone:", s))
