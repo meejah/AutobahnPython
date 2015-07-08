@@ -54,9 +54,9 @@ def check(transport, listen=False):
     if kind == 'websocket':
         assert 'url' in transport
         is_secure, host, port, resource, path, params = parseWsUrl(transport['url'])
-        if not is_secure and ('tls' in transport or 'ssl' in transport):
+        if not is_secure and 'tls' in transport:
             raise RuntimeError(
-                '"ssl" or "tls" key conflicts with the "ws:" prefix of the url'
+                '"tls" key conflicts with the "ws:" prefix of the url'
                 ' argument. Did you mean to use "wss:"?'
             )
 
@@ -106,7 +106,7 @@ def check_endpoint(endpoint, listen=False):
 
     valid_keys = [
         'type', 'port', 'version', 'interface', 'backlog', 'shared',
-        'tls', 'path', 'host', 'ssl',
+        'tls', 'path', 'host',
     ]
     for key in endpoint.keys():
         assert key in valid_keys, "Invalid key '{}'".format(key)
@@ -124,11 +124,8 @@ def check_endpoint(endpoint, listen=False):
         for x in ['host', 'port', 'interface', 'tls', 'shared', 'version']:
             assert x not in endpoint
         assert 'path' in endpoint
-        if endpoint.get('ssl', False) or 'tls' in endpoint:
+        if 'tls' in endpoint:
             raise RuntimeError("No TLS in Unix sockets")
-        if 'ssl' in endpoint and 'tls' in endpoint:
-            raise RuntimeError("'ssl' and 'tls' are mutually exclusive "
-                                   "in endpoint configuration")
 
     timeout = float(endpoint.get('timeout', 10))
     assert timeout > 0.0

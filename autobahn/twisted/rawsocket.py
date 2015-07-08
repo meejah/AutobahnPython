@@ -109,10 +109,10 @@ class WampRawSocketProtocol(Int32StringReceiver):
         if self.factory.debug:
             log.msg("WampRawSocketProtocol: connection lost: reason = '{0}'".format(reason))
 
-        wasClean = isinstance(reason.value, ConnectionDone)
+        was_clean = isinstance(reason.value, ConnectionDone)
         try:
             if self._session is not None:
-                self._session.onClose(wasClean)
+                self._session.onClose(was_clean)
         except Exception as e:
             self.logger.failure("While calling onClose on '{session}'", session=repr(self._session))
         self._session = None
@@ -129,7 +129,6 @@ class WampRawSocketProtocol(Int32StringReceiver):
 
         except ProtocolError as e:
             self.logger.error("Protocol error: {err}", err=str(e))
-            self.logger.error("Aborting connection.")
             self.abort()
 
         except Exception as e:
@@ -191,12 +190,6 @@ class WampRawSocketServerProtocol(WampRawSocketProtocol):
     """
 
     def dataReceived(self, data):
-        if False and self.transport:
-            print("XXX", type(self.transport))
-            self.transport.abortConnection()
-            #self.transport.loseConnection()
-            #import os
-            #os.close(self.transport.fileno())
         if self._handshake_complete:
             WampRawSocketProtocol.dataReceived(self, data)
         else:
