@@ -80,7 +80,7 @@ def _create_tcp4_stream_transport(loop, cfg, wamp_transport_factory):
     """
 
     is_secure, host, port, resource, path, params = parseWsUrl(cfg['url'])
-    ssl = cfg.get('ssl', is_secure)
+    ssl = cfg.get('tls', is_secure)
     return asyncio.async(loop.create_connection(wamp_transport_factory, host, port, ssl=ssl))
 
 
@@ -107,7 +107,6 @@ def _connect_stream(loop, cfg, wamp_transport_factory):
 
     elif cfg['type'] == 'tcp':
         if cfg.get('version', 4) == 4:
-            ssl = cfg.get('ssl', None)
             f = _create_tcp4_stream_transport(loop, cfg, wamp_transport_factory)
         else:
             raise RuntimeError("FIXME: IPv6 asyncio")

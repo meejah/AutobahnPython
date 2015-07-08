@@ -344,8 +344,9 @@ class _ApplicationRunner(object):
     - autobahn.twisted.asyncio.ApplicationRunner
     """
 
+    # XXX FIXME debug, debug_wamp etc. If we want to keep something
+    # similar, put it in the transport config?
     def __init__(self, url_or_transports, realm, extra=None,
-                 ssl=None,  # kind-of related to transports too ...
                  debug=False, debug_wamp=False, debug_app=False):
         """
         :param realm: The WAMP realm to join the application session to.
@@ -362,16 +363,11 @@ class _ApplicationRunner(object):
             If you pass a single string instead of an iterable, it is
             treated as a WebSocket URL and a single TCP4 transport is
             automatically created.
-
-        XXX FIXME logically, "TLS stuff" should go in the transports; what
-        to do with ssl= arg? for now we'll just stuff it automagically
-        in every transport def'n
-
-        :type transports: iterable (of dicts)
+        :type url_or_transports: iterable (of dicts)
 
         :param extra: Optional extra configuration to forward to the
             application component.
-        :type extra: dict
+        :type extra: any object
 
         :param debug: Turn on low-level debugging.
         :type debug: bool
@@ -381,15 +377,6 @@ class _ApplicationRunner(object):
 
         :param debug_app: Turn on app-level debugging.
         :type debug_app: bool
-
-        :param ssl: (Optional). If specified this should be an
-            instance suitable to pass as ``sslContextFactory`` to
-            :class:`twisted.internet.endpoints.SSL4ClientEndpoint`` such
-            as :class:`twisted.internet.ssl.CertificateOptions`. Leaving
-            it as ``None`` will use the result of calling Twisted's
-            :meth:`twisted.internet.ssl.platformTrust` which tries to use
-            your distribution's CA certificates.
-        :type ssl: :class:`twisted.internet.ssl.CertificateOptions`
         """
 
         self.realm = realm
@@ -398,7 +385,6 @@ class _ApplicationRunner(object):
         self.debug_wamp = debug_wamp
         self.debug_app = debug_app
         self.make = None
-        self.ssl = ssl
         self._protocol = None
         self._session = None
         if type(url_or_transports) in [StringType, six.text_type]:
