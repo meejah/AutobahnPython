@@ -97,11 +97,9 @@ Default([imgs, docs])
 
 ## Upload to Amazon S3
 ##
-uploaded = env.s3_dir_uploader(UPLOADED, DOCSDIR, BUCKET, BUCKET_PREFIX)
-
-Depends(uploaded, docs)
-Depends(uploaded, imgs)
-
-Clean(uploaded, UPLOADED)
-
-Alias("publish", uploaded)
+if hasattr(env, 's3_dir_uploader'):
+   uploaded = env.s3_dir_uploader(UPLOADED, DOCSDIR, BUCKET, BUCKET_PREFIX)
+   Depends(uploaded, docs)
+   Depends(uploaded, imgs)
+   Clean(uploaded, UPLOADED)
+   Alias("publish", uploaded)

@@ -11,7 +11,25 @@ all:
 	@echo "  doctest           : run doctests"
 	@echo ""
 
-build:
+# XXX
+# I can't make SCons play nicely with a virtualenv -- it won't install
+# in one, and when I do a sphinx-build inside one via "python `which
+# scons`" the trollius imports fail (but inside the same venv,
+# sphinx-build works fine). So, I'm giving up on SCons since we don't
+# actually optimize any SVGs with it so all it's doing is the "upload
+# to Amazon S3" step which I can't test anyway...
+
+venv: Makefile requirements.txt
+	scons --version > /dev/null # make sure we have SCons
+	virtualenv --system-site-packages ./venv
+	./venv/bin/pip install --upgrade pip
+	./venv/bin/pip install -r requirements.txt
+	./venv/bin/pip install --editable ../[asyncio,twisted]
+
+build: venv
+	./venv/bin/sphinx-build -A cstatic="//tavendo-common-static.s3-eu-west-1.amazonaws.com" -b html . _build
+
+__build:
 	scons
 
 build_no_network:
