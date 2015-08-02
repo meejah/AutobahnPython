@@ -1,0 +1,18 @@
+{
+   "pid": 4481,
+   "options": {
+      "reactor": null,
+      "loglevel": "info",
+      "logtofile": false,
+      "logformat": "colour",
+      "command": "start",
+      "logdir": null,
+      "debug": false,
+      "config": "/home/oberstet/scm/autobahn/AutobahnPython/examples/twisted/wamp/unix-rawsocket/.crossbar/config.json",
+      "cbdir": "/home/oberstet/scm/autobahn/AutobahnPython/examples/twisted/wamp/unix-rawsocket/.crossbar"
+   },
+   "argv": [
+      "/home/oberstet/python279_1/bin/crossbar",
+      "start"
+   ]
+}

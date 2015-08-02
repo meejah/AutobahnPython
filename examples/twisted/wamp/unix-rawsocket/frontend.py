@@ -53,19 +53,25 @@ def main(reactor):
 
     websocket_tcp_transport = {
         "type": "websocket",
-        "url": "ws://127.0.0.1/ws",
+        "url": "ws://localhost:8080/ws",
         "endpoint": {
             "type": "tcp",
             "host": "127.0.0.1",
-            "port": 8081,
+            "port": 8080,
         }
     }
 
-    transports = [bad_transport, rawsocket_unix_transport, websocket_tcp_transport, {"just": "completely bogus"}]
+    transports = [
+#        bad_transport,
+        rawsocket_unix_transport,
+        websocket_tcp_transport,
+#        {"just": "completely bogus"}
+    ]
+
     def random_transports():
         while True:
             t = random.choice(transports)
-            # print("Returning transport:", t)
+            print("Returning transport:", t)
             yield t
 
     if False:
