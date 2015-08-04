@@ -1,0 +1,7 @@
+scour
+taschenmesser
+sphinx
+sphinx-bootstrap-theme
+pyenchant
+sphinxcontrib-spelling
+repoze.sphinx.autointerface
