@@ -26,6 +26,7 @@
 
 from __future__ import absolute_import
 
+import os
 # t.i.reactor doesn't exist until we've imported it once, but we
 # need it to exist so we can @patch it out in the tests ...
 from twisted.internet import reactor  # noqa
@@ -36,15 +37,16 @@ from mock import patch, Mock
 
 from autobahn.twisted.wamp import ApplicationRunner
 
-
 def raise_error(*args, **kw):
     raise RuntimeError("we always fail")
-
 
 class TestApplicationRunner(unittest.TestCase):
     @patch('twisted.internet.reactor')
     def test_runner_default(self, fakereactor):
         fakereactor.connectTCP = Mock(side_effect=raise_error)
+        def call(proc, *args, **kw):
+            return proc(*args, **kw)
+        fakereactor.callWhenRunning = call
         runner = ApplicationRunner(u'ws://fake:1234/ws', u'dummy realm')
 
         # we should get "our" RuntimeError when we call run
@@ -82,10 +84,8 @@ class TestApplicationRunner(unittest.TestCase):
         d = runner.run(Mock(), start_reactor=False)
 
         # shouldn't have actually connected to anything
-        # successfully, and the run() call shouldn't have inserted
-        # any of its own call/errbacks. (except the cleanup handler)
+        # successfully
         self.assertFalse(d.called)
-        self.assertEqual(1, len(d.callbacks))
 
         # neither reactor.run() NOR reactor.stop() should have been called
         # (just connectTCP() will have been called)

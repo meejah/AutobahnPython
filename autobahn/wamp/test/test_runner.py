@@ -40,6 +40,7 @@ if os.environ.get('USE_TWISTED', False):
         This just fakes out enough reactor methods so .run() can work.
         '''
         stop_called = False
+        running = True
 
         def __init__(self, to_raise):
             self.stop_called = False
@@ -57,6 +58,9 @@ if os.environ.get('USE_TWISTED', False):
 
         def connectTCP(self, *args, **kw):
             raise RuntimeError("ConnectTCP shouldn't get called")
+
+        def callWhenRunning(self, method, *args, **kw):
+            return method(*args, **kw)
 
     class TestWampTwistedRunner(unittest.TestCase):
         def test_connect_error(self):

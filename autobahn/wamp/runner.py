@@ -37,6 +37,7 @@ import txaio
 
 from autobahn.wamp import transport
 from autobahn.wamp.exception import TransportLost
+from autobahn.websocket.protocol import parseWsUrl
 
 # XXX move to transport?
 class Connection(object):
