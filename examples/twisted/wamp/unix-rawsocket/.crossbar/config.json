@@ -47,6 +47,13 @@
                     "type": "unix",
                     "path": "/tmp/cb-raw"
                 }
+            },
+            {
+                "type": "websocket",
+                "endpoint": {
+                    "type": "unix",
+                    "path": "/tmp/cb-web"
+                }
             }
          ]
       }

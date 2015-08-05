@@ -1,9 +1,9 @@
 from __future__ import print_function
 
 try:
-    from asyncio import sleep, coroutine#, get_event_loop
+    from asyncio import sleep, coroutine, get_event_loop
 except ImportError:
-    from trollius import sleep, coroutine#, get_event_loop
+    from trollius import sleep, coroutine, get_event_loop
 
 from autobahn.asyncio.wamp import ApplicationSession, ApplicationRunner, Connection
 
@@ -14,8 +14,8 @@ class ClientSession(ApplicationSession):
         print("Joined", details)
         sub = yield self.subscribe(self.subscription, "test.sub")
         print("subscribed", sub)
-        print("disconnecting in 12 seconds")
-        yield sleep(12)
+        print("disconnecting in 5 seconds")
+        yield sleep(5)
         # if you disconnect() then the reconnect logic still keeps
         # trying; if you leave() then it stops trying
         if False:
@@ -25,8 +25,8 @@ class ClientSession(ApplicationSession):
             print("leave()-ing")
             self.leave()
 
-#    def onClose(self, *args, **kw):
-#        raise RuntimeError("Boom")
+    def onLeave(self, reason):
+        get_event_loop().stop()
 
     def subscription(self, *args, **kw):
         print("sub:", args, kw)
@@ -49,7 +49,16 @@ if __name__ == '__main__':
         "url": "ws://127.0.0.1/ws",
         "endpoint": {
             "type": "unix",
-            "path": "/tmp/cb-socket",
+            "path": "/tmp/cb-web",
+        }
+    }
+
+    rawsocket_unix_transport = {
+        "type": "rawsocket",
+        "url": "ws://127.0.0.1/ws",
+        "endpoint": {
+            "type": "unix",
+            "path": "/tmp/cb-raw",
         }
     }
 
