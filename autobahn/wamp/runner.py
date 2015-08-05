@@ -40,6 +40,7 @@ from autobahn.wamp.exception import TransportLost
 from autobahn.websocket.protocol import parseWsUrl
 
 # XXX move to transport?
+# XXX should at least move to same file as the "connect_to" things?
 class Connection(object):
     """
     This represents configuration of a protocol and transport to make
@@ -73,17 +74,23 @@ class Connection(object):
         level)
     """
 
-    # XXX just make these strings for easier debugging? object() makes
-    # it clear you have to use Connection.ERROR etc though...
+    # events that we emit; if adding one, add to _event_listeners dict
+    # too
 
-    # possible events that we emit; if adding one, add to
-    # _event_listeners dict too
-    ERROR = object()  #: callback gets Exception instance
-    CREATE_SESSION = object()  #: callback gets ApplicationSession instance
-    SESSION_LEAVE = object()  #: callback gets ApplicationSession instance
-    CONNECTED = object()  #: callback gets IProtocol instance
-    CLOSED = object()  #: callback gets reason (string) + details (CloseDetails instance)
-                       #: reason is "lost", "closed" or "unreachable"
+    #: callback gets Exception instance
+    ERROR = object()
+
+    #: callback gets ApplicationSession instance
+    CREATE_SESSION = object()
+
+    #: callback gets ApplicationSession instance
+    SESSION_LEAVE = object()
+
+    #: callback gets IProtocol instance
+    CONNECTED = object()
+
+    #: callback gets reason (string): "lost", "closed" or "unreachable"
+    CLOSED = object()
 
     def __init__(self, session_factory, transports, realm, extra):
         """
@@ -111,7 +118,7 @@ class Connection(object):
         self.connect_count = 0
         self.attempt_count = 0
 
-        # private state + config
+        # private state + configuration
         self._session_factory = session_factory
         self._realm = realm
         self._extra = extra
@@ -133,7 +140,7 @@ class Connection(object):
                     yield tr
         self._transport_gen = transport_gen()
 
-        # ifdef which connect_to we need
+        # figure out which connect_to implementation we need
         if txaio.using_twisted:
             from autobahn.twisted.wamp import connect_to
         else:
@@ -242,7 +249,7 @@ class Connection(object):
                     if exc is None:
                         self._fire_event(self.CLOSED, "closed")
                     else:
-                        # XXX javascrpt allows this to return
+                        # XXX javascript allows this to return
                         # "false" to cancel reconnection
                         self._fire_event(self.CLOSED, "lost")
                 self.protocol = None
@@ -259,11 +266,14 @@ class Connection(object):
         """
         Nicely close the session and/or transport. Returns a
         Deferred/Future that callbacks (with None) when we've closed
-        down. throws RuntimeError if the connection is already closed.
+        down.
+
+        Does nothing if the connection is already closed.
         """
 
         if self.session is not None:
             return self.session.leave()
+
         elif self.protocol:
             try:
                 if txaio.using_twisted:
@@ -271,6 +281,7 @@ class Connection(object):
                 else:
                     self.protocol.lost_connection()
                 return self.protocol.is_closed
+
             except TransportLost:
                 # mimicing JS API, but...
                 # XXX is this really an error? could just ignore it ...
@@ -289,18 +300,25 @@ class Connection(object):
             try:
                 cb(*args, **kw)
             except Exception as e:
+                # XXX should use logger
                 print("While running callback '{}' for '{}': {}".format(
                     cb, self._event_to_name(evt), e))
                 import traceback
                 traceback.print_exc()
 
     def _event_to_name(self, evt):
+        """
+        Internal helper that maps event objects back to strings
+        """
         for (k, v) in self.__class__.__dict__.items():
             if v == evt:
                 return k
         return 'unknown'
 
     def _create_session(self, cfg):
+        """
+        Internal helper to create a new self.session instance and fire events
+        """
         self.session = self._session_factory(cfg)
         self._fire_event(self.CREATE_SESSION, self.session)
         self.connect_count += 1
