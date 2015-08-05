@@ -31,6 +31,7 @@ from __future__ import absolute_import, print_function
 
 from types import StringType, ListType
 from functools import wraps
+import itertools
 import json
 import six
 import txaio
@@ -134,11 +135,7 @@ class Connection(object):
         }
 
         # generate a new transport to try
-        def transport_gen():
-            while True:
-                for tr in transports:
-                    yield tr
-        self._transport_gen = transport_gen()
+        self._transport_gen = itertools.cycle(transports)
 
         # figure out which connect_to implementation we need
         if txaio.using_twisted:
