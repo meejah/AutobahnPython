@@ -26,6 +26,8 @@
 
 from __future__ import absolute_import
 
+import six
+import txaio
 from autobahn.websocket.protocol import parseWsUrl
 
 
@@ -106,6 +108,17 @@ def check_endpoint(endpoint, listen=False):
 
     :returns: True if this is a valid endpoint, or an exception otherwise
     """
+
+    if txaio.using_twisted:
+        if isinstance(endpoint, six.text_type):
+            # XXX FIXME can we ask Twisted "is this a valid
+            # client-config", or do we have to just call
+            # clientFromString() and catch?
+            return True
+
+        from twisted.internet.interfaces import IStreamClientEndpoint
+        if IStreamClientEndpoint.providedBy(endpoint):
+            return True
 
     valid_keys = [
         'type', 'port', 'version', 'interface', 'backlog', 'shared',
