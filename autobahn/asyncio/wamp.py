@@ -253,6 +253,6 @@ class ApplicationRunner(_ApplicationRunner):
         # give Goodbye message a chance to go through, if we still
         # have an active session
         if hasattr(protocol, '_session') and protocol._session is not None:
-            loop.run_until_complete(protocol._session.leave())
-
+            if protocol._session._session_id:
+                loop.run_until_complete(protocol._session.leave())
         loop.close()
