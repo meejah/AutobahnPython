@@ -325,23 +325,11 @@ class Connection(object):
 
         @wraps(self.session.onLeave)
         def wrapper(*args, **kw):
-            # callback with the Failure instance
             rtn = on_leave(*args, **kw)
             self._fire_event(self.SESSION_LEAVE, self.session)
             self.session = None  # must come *after* callbacks
             return rtn
         self.session.onLeave = wrapper
-
-        # "listen" for disconnect/leave so we know if we should keep
-        # re-trying or not ...
-        # this means: disconnect() and we keep reconnecting; leave() and we stop
-        leave = self.session.leave
-        @wraps(self.session.leave)
-        def wrapper(*args, **kw):
-            rtn = leave(*args, **kw)
-            self._shutting_down = True
-            return rtn
-        self.session.leave = wrapper
 
         return self.session
 
