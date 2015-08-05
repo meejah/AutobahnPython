@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import random
 
+from twisted.internet.endpoints import UNIXClientEndpoint
 from twisted.internet.defer import inlineCallbacks, DeferredList, Deferred
 from twisted.internet.task import react
 
@@ -63,11 +64,18 @@ def main(reactor):
     # we set up a transport that will definitely fail to demonstrate
     # re-connection as well. note that "transports" can be an iterable
 
+    native_object_transport = {
+        "type": "websocket",
+        "url": "ws://localhost:8080/ws",
+        "endpoint": UNIXClientEndpoint(reactor, '/tmp/cb-web')
+    }
+
     transports = [
-        # bad_transport,
-        rawsocket_unix_transport,
-        websocket_tcp_transport,
-        # {"just": "completely bogus"}
+#        bad_transport,
+        native_object_transport,
+#        rawsocket_unix_transport,
+#        websocket_tcp_transport,
+#        {"just": "completely bogus"}
     ]
 
     def random_transports():
