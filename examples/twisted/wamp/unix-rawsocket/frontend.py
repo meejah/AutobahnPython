@@ -30,42 +30,44 @@ class ClientSession(ApplicationSession):
         print("sub:", args, kw)
 
 
+
+bad_transport = {
+    "type": "rawsocket",
+    "endpoint": {
+        "type": "unix",
+        "path": "/tmp/cb-raw-foo",
+    }
+}
+
+rawsocket_unix_transport = {
+    "type": "rawsocket",
+    "endpoint": {
+        "type": "unix",
+        "path": "/tmp/cb-raw",
+    }
+}
+
+websocket_tcp_transport = {
+    "type": "websocket",
+    "url": "ws://localhost:8080/ws",
+    "endpoint": {
+        "type": "tcp",
+        "host": "127.0.0.1",
+        "port": 8080,
+    }
+}
+
+
 @inlineCallbacks
 def main(reactor):
     # we set up a transport that will definitely fail to demonstrate
     # re-connection as well. note that "transports" can be an iterable
 
-    bad_transport = {
-        "type": "rawsocket",
-        "endpoint": {
-            "type": "unix",
-            "path": "/tmp/cb-raw-foo",
-        }
-    }
-
-    rawsocket_unix_transport = {
-        "type": "rawsocket",
-        "endpoint": {
-            "type": "unix",
-            "path": "/tmp/cb-raw",
-        }
-    }
-
-    websocket_tcp_transport = {
-        "type": "websocket",
-        "url": "ws://localhost:8080/ws",
-        "endpoint": {
-            "type": "tcp",
-            "host": "127.0.0.1",
-            "port": 8080,
-        }
-    }
-
     transports = [
-#        bad_transport,
+        # bad_transport,
         rawsocket_unix_transport,
         websocket_tcp_transport,
-#        {"just": "completely bogus"}
+        # {"just": "completely bogus"}
     ]
 
     def random_transports():
@@ -129,9 +131,16 @@ def main(reactor):
     print("exiting main")
 
 
-if False:
+if True:
     # "normal" usage
-    runner = ApplicationRunner([dict(url="ws://127.0.0.1:8081/ws")], u"realm1")
+    transports = [
+        rawsocket_unix_transport,
+        websocket_tcp_transport,
+    ]
+
+    #transports = [dict(url="ws://localhost:8080/ws")]
+
+    runner = ApplicationRunner(transports, u"realm1")
     runner.run(ClientSession)
     print("exiting.")
 
