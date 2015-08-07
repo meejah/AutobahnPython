@@ -16,7 +16,7 @@ class ClientSession(ApplicationSession):
         print("Joined", details)
         sub = yield self.subscribe(self.subscription, "test.sub")
         print("subscribed", sub)
-        print("disconnecting in 6 seconds")
+        print("leaving in 6 seconds")
         yield sleep(6)
         # if you disconnect() then the reconnect logic still keeps
         # trying; if you leave() then it stops trying
@@ -26,6 +26,15 @@ class ClientSession(ApplicationSession):
         else:
             print("leave()-ing")
             self.leave()
+
+    def onLeave(self, details):
+        print("onleave", details)
+        print("disconnecting in 3 seconds")
+        from twisted.internet import reactor
+        reactor.callLater(3, self.disconnect)
+
+    def onDisconnect(self):
+        print("DISCONECT")
 
     def subscription(self, *args, **kw):
         print("sub:", args, kw)
@@ -81,7 +90,7 @@ def main(reactor):
     def random_transports():
         while True:
             t = random.choice(transports)
-            print("Returning transport:", t)
+            print("Returning transport: {}".format(t))
             yield t
 
     if False:
@@ -99,47 +108,38 @@ def main(reactor):
 
         # "advanced" usage, passing "start_reactor=False" so we get access to the connection object
         connection = yield runner.run(ClientSession, start_reactor=False)
+        d = Deferred()
 
     elif True:
         # ...OR should just eliminate ^ start_reactor= and "make" you use
         # the Connection API directly if you want a Connection instance? like this:
         connection = Connection(ClientSession, random_transports(), u"realm1", extra=None)
-        yield connection.open(reactor)
+
+        def blam(*args, **kw):
+            print("ZZXXCC", args, kw)
+            sys.stdout.write('{} {}\n'.format(args, kw))
+        connection.on('join', blam)
+        connection.on('leave', blam)
+        connection.on.connect(blam)
+        connection.on.disconnect(blam)
+        print("about to open")
+        d = connection.open(reactor)
 
     else:
         # lowest-level API, connecting a single transport, yielding an IProtocol
         # XXX consider making this one private for now? i.e. "_connect_to"
         connection = None
         proto = yield connect_to(reactor, rawsocket_unix_transport, ClientSession, u"realm1", None)
-        print("Protocol", proto)
-        yield sleep(10)
+        print("Protocol {}".format(proto))
+        d = sleep(10)
         print("done.")
 
-    if connection is not None:
-        print("Connection!", connection)
-        connection.add_event(Connection.CREATE_SESSION, lambda s: print("new session:", s))
-        connection.add_event(Connection.SESSION_LEAVE, lambda s: print("session gone:", s))
-        connection.add_event(Connection.CONNECTED, lambda p: print("protocol connected:", p))
-        connection.add_event(Connection.ERROR, lambda e: print("connection error:", e))
-
-        stopping = []
-        def shutdown(reason):
-            print("shutdown because '{}'".format(reason))
-            stopping.append(False)
-        connection.add_event(Connection.CLOSED, shutdown)
-
-        while not stopping:
-            yield sleep(1)
-            print("connection:", connection)
-            if connection.session:
-                # we're doing this so there's "some" traffic so you can
-                # hard-kill connections and see them fail fast
-                connection.session.publish('foo')
-
+    print("waiting for the all-done thing")
+    x = yield d
     print("exiting main")
 
 
-if True:
+if False:
     # "normal" usage
     transports = [
         rawsocket_unix_transport,

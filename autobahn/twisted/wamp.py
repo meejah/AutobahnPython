@@ -277,13 +277,6 @@ class ApplicationRunner(_ApplicationRunner):
             self.extra,
         )
 
-        def on_error(e):
-            if e is not None:
-                print("Error:", e)
-            if start_reactor:
-                reactor.stop()
-        connection.add_event(Connection.ERROR, on_error)
-
         # if the user didn't ask us to start the reactor, then they
         # get to deal with any connect errors themselves.
         if start_reactor:
@@ -297,13 +290,16 @@ class ApplicationRunner(_ApplicationRunner):
                 def __call__(self, failure):
                     self.exception = failure.value
                     print(failure.getErrorMessage())
-                    if reactor.running:
-                        reactor.stop()
             connect_error = ErrorCollector()
+
+            def shutdown(_):
+                if reactor.running:
+                    reactor.stop()
 
             def startup():
                 d = connection.open(reactor)
                 d.addErrback(connect_error)
+                d.addBoth(shutdown)
             reactor.callWhenRunning(startup)
 
             # now enter the Twisted reactor loop

@@ -39,6 +39,7 @@ import txaio
 from autobahn.wamp import transport
 from autobahn.wamp.exception import TransportLost
 from autobahn.websocket.protocol import parseWsUrl
+from autobahn.wamp.protocol import _ListenerCollection
 
 # XXX move to transport?
 # XXX should at least move to same file as the "connect_to" things?
@@ -75,24 +76,8 @@ class Connection(object):
         level)
     """
 
-    # events that we emit; if adding one, add to _event_listeners dict
-    # too
-
-    #: callback gets Exception instance
-    ERROR = object()
-
-    #: callback gets ApplicationSession instance
-    CREATE_SESSION = object()
-
-    #: callback gets ApplicationSession instance
-    SESSION_LEAVE = object()
-
-    #: callback gets IProtocol instance
-    CONNECTED = object()
-
-    #: callback gets reason (string): "lost", "closed" or "unreachable"
-    CLOSED = object()
-
+    # XXX if we keep session_factory here, we need event-forwarding
+    # thing to connect session events when it's finally created...
     def __init__(self, session_factory, transports, realm, extra):
         """
         :param session_factory: callable that takes a ComponentConfig and
@@ -114,6 +99,7 @@ class Connection(object):
         assert(type(realm) == six.text_type)
 
         # public state (part of the API)
+        self.on = _ListenerCollection(['join', 'leave', 'connect', 'disconnect'])
         self.protocol = None
         self.session = None
         self.connect_count = 0
@@ -124,15 +110,7 @@ class Connection(object):
         self._realm = realm
         self._extra = extra
         self._connecting = None  # a Deferred/Future while connecting
-
-        # our event listeners
-        self._event_listeners = {
-            self.ERROR: [],
-            self.CREATE_SESSION: [],
-            self.SESSION_LEAVE: [],
-            self.CONNECTED: [],
-            self.CLOSED: [],
-        }
+        self._done = None  # a Deferred/Future that fires when we're done
 
         # generate a new transport to try
         self._transport_gen = itertools.cycle(transports)
@@ -144,48 +122,17 @@ class Connection(object):
             from autobahn.asyncio.wamp import connect_to
         self._connect_to = connect_to
 
-    def add_event(self, event_type, cb):
-        """
-        Add a listener for the given ``event_type``; the callback ``cb``
-        takes a single argument, whose value depends on the
-        event.
-
-        XXX should CLOSED be an exception and take CloseDetails also?
-        but only when "closed" state?! (like AutobahnJS)
-
-        Valid events are:
-
-         - ``ERROR``: called with Exception whenever a connect() attempt fails
-         - ``CREATE_SESSION``: called with ApplicationSession instance upon session creation
-         - ``SESSION_LEAVE``: called with ApplicationSession instance when session leaves
-         - ``CONNECTED``: called with IProtocol instance when transport connects
-         - ``CLOSED``: called when transport disconnects with "unreachable", "lost", or "closed"
-        """
-        try:
-            self._event_listeners[event_type].append(cb)
-        except KeyError:
-            raise ValueError("Unknown event-type '{}'".format(event_type))
-
-    def remove_event(self, event_type, cb):
-        """
-        Stop listening.
-        """
-        try:
-            self._event_listeners[event_type].remove(cb)
-        except ValueError:
-            msg = "Callback '{}' not found for event '{}'"
-            raise ValueError(msg.format(cb, event_type))
-        except KeyError:
-            msg = "No listeners for event '{}'"
-            raise ValueError(msg.format(event_type))
-
-    # XXX actually, just this thing needs custom implementation for asyncio vs. Twisted?
-
-
+    # XXX move "loop" arg to ctor
     def open(self, loop):
         """
         Starts connecting (possibly also re-connecting) and returns a
-        Deferred/Future that fires (with None) when we first connect.
+        Deferred/Future that fires (with None) only after the session
+        disconnects.
+
+        This future will fire with an error if we:
+
+          1. can't connect at all
+          2. connect, but the connection closes uncleanly
         """
         # XXX for now, all we look at is the first transport! ...this
         # will get fixed with retry-logic
@@ -197,6 +144,7 @@ class Connection(object):
         transport.check(transport_config, listen=False)
 
         self.attempt_count += 1
+        self._done = txaio.create_future()
         self._connecting = txaio.as_future(
             self._connect_to, loop, transport_config,
             self._create_session, self._realm, self._extra,
@@ -213,51 +161,8 @@ class Connection(object):
         def on_success(proto):
             self.protocol = proto
 
-            # "listen" for connectionLost
-
-            # XXX this smells ... bad. Perhaps adding something we can
-            # listen to on transports, that has the same return value
-            # for twisted/asyncio (maybe just "closed" or "lost"?)
-            # ... or this whole "shared impl for Connection" approach is flawed?
-            # XXX basically: get rid of framework-specific "ifdef"s from here
-
-            if txaio.using_twisted:
-                orig = self.protocol.transport.connectionLost
-            else:
-                orig = self.protocol.connection_lost
-
-            @wraps(orig)
-            def wrapper(*args, **kw):
-                rtn = orig(*args, **kw)
-
-                if txaio.using_twisted:
-                    # first arg is a Failure
-                    exc = args[0].value
-                    from twisted.internet.error import ConnectionDone
-                    if isinstance(exc, ConnectionDone):
-                        exc = None
-                else:
-                    # first arg is the Exception, or None if clean
-                    exc = args[0]
-
-                if self.connect_count == 0:
-                    self._fire_event(self.CLOSED, "unreachable")
-                else:
-                    if exc is None:
-                        self._fire_event(self.CLOSED, "closed")
-                    else:
-                        # XXX javascript allows this to return
-                        # "false" to cancel reconnection
-                        self._fire_event(self.CLOSED, "lost")
-                self.protocol = None
-                return rtn
-            if txaio.using_twisted:
-                self.protocol.transport.connectionLost = wrapper
-            else:
-                self.protocol.connection_lost = wrapper
-
         txaio.add_callbacks(self._connecting, on_success, on_error)
-        return self._connecting
+        return self._done
 
     def close(self):
         """
@@ -288,49 +193,36 @@ class Connection(object):
                 txaio.resolve(f, None)
                 return f
 
-    def _fire_event(self, evt, *args, **kw):
-        """
-        Internal helper. MUST NOT throw Exceptions
-        """
-        # print("FIRE", self._event_to_name(evt), args)
-        for cb in self._event_listeners[evt]:
-            try:
-                cb(*args, **kw)
-            except Exception as e:
-                # XXX should use logger
-                print("While running callback '{}' for '{}': {}".format(
-                    cb, self._event_to_name(evt), e))
-                import traceback
-                traceback.print_exc()
+    def _on_leave(self, session):
+        # transport not gone, we're NOT done
+        # self._done.callback(None)
+        return self.on.leave._notify(session)
 
-    def _event_to_name(self, evt):
-        """
-        Internal helper that maps event objects back to strings
-        """
-        for (k, v) in self.__class__.__dict__.items():
-            if v == evt:
-                return k
-        return 'unknown'
+    def _on_disconnect(self, reason):
+        if reason == 'closed':
+            self._done.callback(None)
+        else:
+            self._done.errback(Exception('Transport disconnected uncleanly'))
+        return self.on.disconnect._notify(reason)
+
+    def _on_join(self, session):
+        print("Forwarding join", self.on.join._listeners)
+        return self.on.join._notify(session)
+
+    def _on_connect(self, session):
+        print("Forwarding connect", self.on.join._listeners)
+        return self.on.connect._notify(session)
 
     def _create_session(self, cfg):
         """
         Internal helper to create a new self.session instance and fire events
         """
         self.session = self._session_factory(cfg)
-        self._fire_event(self.CREATE_SESSION, self.session)
         self.connect_count += 1
-
-        # "listen" for onLeave
-        on_leave = self.session.onLeave
-
-        @wraps(self.session.onLeave)
-        def wrapper(*args, **kw):
-            rtn = on_leave(*args, **kw)
-            self._fire_event(self.SESSION_LEAVE, self.session)
-            self.session = None  # must come *after* callbacks
-            return rtn
-        self.session.onLeave = wrapper
-
+        self.session.on.leave(self._on_leave)
+        self.session.on.disconnect(self._on_disconnect)
+        self.session.on.join(self._on_join)
+        self.session.on.connect(self._on_connect)
         return self.session
 
     def __str__(self):
