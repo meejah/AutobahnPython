@@ -205,7 +205,8 @@ def connect_to(reactor, transport_config, session_factory, realm, extra, on_erro
     # fires when the transport gets to STATE_CLOSED
     def cleanup():
         if hasattr(proto, '_session') and proto._session is not None:
-            return proto._session.leave()
+            if proto._session._session_id:
+                return proto._session.leave()
     reactor.addSystemEventTrigger('before', 'shutdown', cleanup)
 
     returnValue(proto)
