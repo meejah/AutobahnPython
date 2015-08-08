@@ -161,17 +161,12 @@ def _create_wamp_factory(reactor, cfg, session_factory):
 # XXX THINK move to transport.py?
 # XXX the shutdown hooks being different between asyncio/twisted makes this hard to be generic :(
 @inlineCallbacks
-def connect_to(reactor, transport_config, session_factory, realm, extra, on_error=None):
+def connect_to(reactor, transport_config, session):
     """
     :param transport_config: dict containing valid client transport
     config (see :mod:`autobahn.wamp.transport`)
 
-    :param session_factory: callable that takes a ComponentConfig and
-    returns a new ISession instance (usually simply your
-    ApplicationSession subclass)
-
-    :param on_error: a callable that takes an Exception, called if we
-    get an error connecting
+    :param session: an ISession (e.g. ApplicationSession subclass)
 
     :returns: Deferred that callbacks with a protocol instance after a
     connection has been made (not necessarily a WAMP session joined
@@ -179,17 +174,7 @@ def connect_to(reactor, transport_config, session_factory, realm, extra, on_erro
     """
 
     def create():
-        try:
-            session = session_factory(ComponentConfig(realm, extra))
-            # XXX FIXME session.debug_app = self.debug_app
-            return session
-
-        except Exception as e:
-            if on_error:
-                on_error(e)
-            else:
-                log.err("Exception while creating session: {0}".format(e))
-            raise
+        return session
 
     transport_factory = _create_wamp_factory(reactor, transport_config, create)
 
@@ -236,6 +221,7 @@ class ApplicationRunner(_ApplicationRunner):
     #  - have a "add_session" that takes session_factory, creates a Connection instance, adds to internal list
     #  - run() takes no args and runs all Connections in our list (i.e. get rid of start_reactor=False)
     #  - add_session could return the Connection instance, so if caller wants it they can have it
+    #  - (or add_session just takes a session instance/nothing [default: ApplicationSession]?)
     def run(self, session_factory, start_reactor=True):
         """
         Run an application component.
@@ -271,10 +257,8 @@ class ApplicationRunner(_ApplicationRunner):
         txaio.start_logging(out=sys.stdout, level='info')
 
         connection = Connection(
-            session_factory,
+            self._create_session(),
             self.transports,
-            self.realm,
-            self.extra,
         )
 
         # if the user didn't ask us to start the reactor, then they
@@ -317,6 +301,12 @@ class ApplicationRunner(_ApplicationRunner):
             d.addCallback(lambda _: connection)
             return d
 
+    def _create_session(self, cfg):
+        """
+        Internal helper
+        """
+        self.session = self._session_factory(cfg)
+        return self.session
 
 class Connection(object):
 
@@ -412,6 +402,7 @@ class Application(object):
         self._signals = {}
 
         #: once an app session is connected, this will be that instance
+        # XXX maybe list intead? so we can start many?
         self.session = None
 
     def __call__(self, config):

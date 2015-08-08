@@ -310,7 +310,6 @@ class ApplicationSession(BaseSession):
     The events are:
 
       * `"join"`: the session has been established, and `onJoin` has run
-      * `"join"`: the session has been established, and `onJoin` has run
 
     You may add event listeners as so::
 
@@ -342,7 +341,7 @@ class ApplicationSession(BaseSession):
         # or:
         #    session.on('join', callback)
         #    session.on.remove('join', callback)
-        self.on = _ListenerCollection(['join', 'leave', 'connect', 'disconnect'])
+        self.on = _ListenerCollection(['join', 'leave', 'ready', 'connect', 'disconnect'])
 
         self._transport = None
         self._session_id = None
@@ -475,15 +474,13 @@ class ApplicationSession(BaseSession):
 
                 details = SessionDetails(self._realm, self._session_id, msg.authid, msg.authrole, msg.authmethod)
 
-                d0 = txaio.as_future(self.onJoin, details)
-                def do_join(rtn):
-                    d1 = self.on.join._notify(self)
-                    txaio.add_callbacks(d1, lambda _: rtn, None)
-                txaio.add_callbacks(d0, do_join, None)
+                d = self.on.join._notify(self)
+                txaio.add_callbacks(d, lambda _: txaio.as_future(self.onJoin, details), None)
+                txaio.add_callbacks(d, lambda _: self.on.ready._notify(self), None)
 
                 def _error(e):
                     return self._swallow_error(e, "While firing onJoin")
-                txaio.add_callbacks(d0, None, _error)
+                txaio.add_callbacks(d, None, _error)
 
             elif isinstance(msg, message.Abort):
 
@@ -884,7 +881,6 @@ class ApplicationSession(BaseSession):
 
         d0 = txaio.as_future(self.onDisconnect)
         def do_disconnect(rtn):
-            print("GOT CLOSE", rtn, wasClean)
             detail = 'closed' if wasClean else 'lost'
             d1 = self.on.disconnect._notify(detail)
             txaio.add_callbacks(d1, lambda _: rtn, None)

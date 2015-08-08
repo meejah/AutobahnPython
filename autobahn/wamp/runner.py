@@ -78,41 +78,37 @@ class Connection(object):
 
     # XXX if we keep session_factory here, we need event-forwarding
     # thing to connect session events when it's finally created...
-    def __init__(self, session_factory, transports, realm, extra):
+
+    # XXX OR, we define a "created" event (only) here, that receives
+    # the conenction (or session?) object, and the user can then add
+    # their own leave/etc handlers...
+
+    # XXX should 'transports' be something lower-level, then? And
+    # leave "configuration via dicts" for ApplicationRunner?
+    def __init__(self, session, transports):
         """
-        :param session_factory: callable that takes a ComponentConfig and
-            returns a new ApplicationSession subclass
+        :param session: an ApplicationSession (or subclass) instance.
 
         :param transports: a list of dicts configuring available
             transports. See :meth:`autobahn.wamp.transport.check` for
             valid keys
         :type transports: list of dicts
-
-        :param realm: the realm to join
-        :type realm: unicode
-
-        :param extra: an object available as 'self.config.extra' in
-            your ApplicationSession subclass. Can be anything, e.g
-            dict().
         """
 
         assert(type(realm) == six.text_type)
 
         # public state (part of the API)
-        self.on = _ListenerCollection(['join', 'leave', 'connect', 'disconnect'])
+        self.on = _ListenerCollection(['create'])
         self.protocol = None
-        self.session = None
+        self.session = session
         self.connect_count = 0
         self.attempt_count = 0
 
-        # private state + configuration
-        self._session_factory = session_factory
-        self._realm = realm
-        self._extra = extra
+        # private state / configuration
         self._connecting = None  # a Deferred/Future while connecting
         self._done = None  # a Deferred/Future that fires when we're done
 
-        # generate a new transport to try
+        # generator for the next transport to try
         self._transport_gen = itertools.cycle(transports)
 
         # figure out which connect_to implementation we need
@@ -145,9 +141,12 @@ class Connection(object):
 
         self.attempt_count += 1
         self._done = txaio.create_future()
+        # this will resolve the _done future (good or bad)
+        self.session.on('disconnect', self._on_disconnect)
+
         self._connecting = txaio.as_future(
             self._connect_to, loop, transport_config,
-            self._create_session, self._realm, self._extra,
+            self.session,
         )
 
         def on_error(fail):
@@ -159,6 +158,7 @@ class Connection(object):
             return fail
 
         def on_success(proto):
+            self.connect_count += 1
             self.protocol = proto
 
         txaio.add_callbacks(self._connecting, on_success, on_error)
@@ -193,37 +193,12 @@ class Connection(object):
                 txaio.resolve(f, None)
                 return f
 
-    def _on_leave(self, session):
-        # transport not gone, we're NOT done
-        # self._done.callback(None)
-        return self.on.leave._notify(session)
-
     def _on_disconnect(self, reason):
         if reason == 'closed':
             self._done.callback(None)
         else:
             self._done.errback(Exception('Transport disconnected uncleanly'))
         return self.on.disconnect._notify(reason)
-
-    def _on_join(self, session):
-        print("Forwarding join", self.on.join._listeners)
-        return self.on.join._notify(session)
-
-    def _on_connect(self, session):
-        print("Forwarding connect", self.on.join._listeners)
-        return self.on.connect._notify(session)
-
-    def _create_session(self, cfg):
-        """
-        Internal helper to create a new self.session instance and fire events
-        """
-        self.session = self._session_factory(cfg)
-        self.connect_count += 1
-        self.session.on.leave(self._on_leave)
-        self.session.on.disconnect(self._on_disconnect)
-        self.session.on.join(self._on_join)
-        self.session.on.connect(self._on_connect)
-        return self.session
 
     def __str__(self):
         return "<Connection session={} protocol={} attempts={} connected={}>".format(
@@ -282,9 +257,7 @@ class _ApplicationRunner(object):
         self.debug = debug
         self.debug_wamp = debug_wamp
         self.debug_app = debug_app
-        self.make = None
-        self._protocol = None
-        self._session = None
+
         if type(url_or_transports) in [StringType, six.text_type]:
             # XXX emit deprecation-warning? is it really deprecated?
             _, host, port, _, _, _ = parseWsUrl(url_or_transports)

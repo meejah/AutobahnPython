@@ -1,6 +1,8 @@
 from __future__ import print_function
 
+import time
 import random
+from functools import partial
 
 from twisted.internet.endpoints import UNIXClientEndpoint
 from twisted.internet.defer import inlineCallbacks, DeferredList, Deferred
@@ -8,14 +10,18 @@ from twisted.internet.task import react
 
 from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner, Connection, connect_to
 from autobahn.twisted.util import sleep
+from autobahn.wamp.types import ComponentConfig
 
 
 class ClientSession(ApplicationSession):
+    joins = 2
+
     @inlineCallbacks
     def onJoin(self, details):
-        print("Joined", details)
+        print("joined:", details)
+        self.joins = self.joins - 1
         sub = yield self.subscribe(self.subscription, "test.sub")
-        print("subscribed", sub)
+        print("subscribed:", sub)
         print("leaving in 6 seconds")
         yield sleep(6)
         # if you disconnect() then the reconnect logic still keeps
@@ -28,16 +34,23 @@ class ClientSession(ApplicationSession):
             self.leave()
 
     def onLeave(self, details):
-        print("onleave", details)
-        print("disconnecting in 3 seconds")
+        print("onLeave:", details)
         from twisted.internet import reactor
-        reactor.callLater(3, self.disconnect)
+        if self.joins > 0:
+            print("re-joining in 2 seconds")
+            reactor.callLater(2, self.join, self.config.realm)
+        else:
+            print("disconnecting in 3 seconds")
+            reactor.callLater(3, self.disconnect)
 
     def onDisconnect(self):
-        print("DISCONECT")
+        print("onDisconnect")
 
     def subscription(self, *args, **kw):
         print("sub:", args, kw)
+
+    def __repr__(self):
+        return '<ClientSession id={}>'.format(self._session_id)
 
 
 
@@ -113,15 +126,24 @@ def main(reactor):
     elif True:
         # ...OR should just eliminate ^ start_reactor= and "make" you use
         # the Connection API directly if you want a Connection instance? like this:
-        connection = Connection(ClientSession, random_transports(), u"realm1", extra=None)
+        session = ClientSession(ComponentConfig(u"realm1", extra=None))
 
-        def blam(*args, **kw):
-            print("ZZXXCC", args, kw)
-            sys.stdout.write('{} {}\n'.format(args, kw))
-        connection.on('join', blam)
-        connection.on('leave', blam)
-        connection.on.connect(blam)
-        connection.on.disconnect(blam)
+        def got_event(name, *args, **kw):
+            print("got_event '{}' at '{}': {} {}".format(name, time.time(), args, kw))
+
+        if False:
+            for e in session.on._valid_events:
+                session.on(e, partial(got_event, e))
+        else:
+            # multiple ways to subscribe...? or decide on one?
+            session.on('join', partial(got_event, 'join'))
+            session.on('leave', partial(got_event, 'leave'))
+            session.on.ready(partial(got_event, 'ready'))
+            session.on.connect(partial(got_event, 'connect'))
+            session.on.disconnect(partial(got_event, 'disconnect'))
+            session.on.disconnect.add(partial(got_event, 'disconnect'))
+
+        connection = Connection(session, random_transports())
         print("about to open")
         d = connection.open(reactor)
 
