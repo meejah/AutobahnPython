@@ -39,7 +39,6 @@ import txaio
 from autobahn.wamp import transport
 from autobahn.wamp.exception import TransportLost
 from autobahn.websocket.protocol import parseWsUrl
-from autobahn.wamp.protocol import _ListenerCollection
 
 # XXX move to transport?
 # XXX should at least move to same file as the "connect_to" things?
@@ -85,7 +84,7 @@ class Connection(object):
 
     # XXX should 'transports' be something lower-level, then? And
     # leave "configuration via dicts" for ApplicationRunner?
-    def __init__(self, session, transports):
+    def __init__(self, session, transports, loop=None):
         """
         :param session: an ApplicationSession (or subclass) instance.
 
@@ -93,12 +92,14 @@ class Connection(object):
             transports. See :meth:`autobahn.wamp.transport.check` for
             valid keys
         :type transports: list of dicts
+
+        :param loop: reactor/event-loop instance (or None for a default one)
+        :type loop: IReactorCore (Twisted) or EventLoop (asyncio)
         """
 
         assert(type(realm) == six.text_type)
 
         # public state (part of the API)
-        self.on = _ListenerCollection(['create'])
         self.protocol = None
         self.session = session
         self.connect_count = 0
@@ -118,8 +119,9 @@ class Connection(object):
             from autobahn.asyncio.wamp import connect_to
         self._connect_to = connect_to
 
-    # XXX move "loop" arg to ctor
-    def open(self, loop):
+        self._loop = loop
+
+    def open(self):
         """
         Starts connecting (possibly also re-connecting) and returns a
         Deferred/Future that fires (with None) only after the session
@@ -145,16 +147,12 @@ class Connection(object):
         self.session.on('disconnect', self._on_disconnect)
 
         self._connecting = txaio.as_future(
-            self._connect_to, loop, transport_config,
-            self.session,
+            self._connect_to, self._loop, transport_config, self.session,
         )
 
         def on_error(fail):
             print("Error connecting to '{}': {}".format(
                 json.dumps(transport_config), fail))
-            # seems redundant but for retry-logic, we can only
-            # Deferred-error on the very first connect_to() attempt
-            self._fire_event(self.ERROR, fail)
             return fail
 
         def on_success(proto):
@@ -198,7 +196,6 @@ class Connection(object):
             self._done.callback(None)
         else:
             self._done.errback(Exception('Transport disconnected uncleanly'))
-        return self.on.disconnect._notify(reason)
 
     def __str__(self):
         return "<Connection session={} protocol={} attempts={} connected={}>".format(

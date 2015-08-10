@@ -48,7 +48,7 @@ def check(transport, listen=False):
     """
     # XXX use if's and real exception instead of assert()s
     for key in transport.keys():
-        assert key in ['type', 'url', 'endpoint']
+        assert key in ['type', 'url', 'endpoint', 'debug', 'debug_wamp']
 
     kind = transport.get('type', 'websocket')
     assert kind in ['websocket', 'rawsocket']

@@ -64,6 +64,7 @@ bad_transport = {
 
 rawsocket_unix_transport = {
     "type": "rawsocket",
+    "debug": True,
     "endpoint": {
         "type": "unix",
         "path": "/tmp/cb-raw",
@@ -72,6 +73,8 @@ rawsocket_unix_transport = {
 
 websocket_tcp_transport = {
     "type": "websocket",
+    "debug": True,
+    "debug_wamp": True,
     "url": "ws://localhost:8080/ws",
     "endpoint": {
         "type": "tcp",
@@ -88,6 +91,8 @@ def main(reactor):
 
     native_object_transport = {
         "type": "websocket",
+        "debug": True,
+        "debug_wamp": True,
         "url": "ws://localhost:8080/ws",
         "endpoint": UNIXClientEndpoint(reactor, '/tmp/cb-web')
     }
@@ -140,12 +145,11 @@ def main(reactor):
             session.on('leave', partial(got_event, 'leave'))
             session.on.ready(partial(got_event, 'ready'))
             session.on.connect(partial(got_event, 'connect'))
-            session.on.disconnect(partial(got_event, 'disconnect'))
             session.on.disconnect.add(partial(got_event, 'disconnect'))
 
-        connection = Connection(session, random_transports())
+        connection = Connection(session, random_transports(), reactor)
         print("about to open")
-        d = connection.open(reactor)
+        d = connection.open()
 
     else:
         # lowest-level API, connecting a single transport, yielding an IProtocol
@@ -170,8 +174,8 @@ if False:
 
     #transports = [dict(url="ws://localhost:8080/ws")]
 
-    runner = ApplicationRunner(transports, u"realm1")
-    runner.run(ClientSession)
+    runner = ApplicationRunner(transports)
+    runner.run(ClientSession, u"realm1")
     print("exiting.")
 
 else:

@@ -35,16 +35,17 @@ import six
 
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet.error import ConnectionDone
-from twisted.internet.interfaces import IStreamClientEndpoint
+from twisted.internet.interfaces import IStreamClientEndpoint, IProtocolFactory
 
-from autobahn.wamp import protocol
-from autobahn.wamp.types import ComponentConfig
 from autobahn.websocket.protocol import parseWsUrl
 from autobahn.twisted.util import sleep
 from autobahn.twisted.websocket import WampWebSocketClientFactory
 from autobahn.twisted.rawsocket import WampRawSocketClientFactory
+from autobahn.wamp import protocol
 from autobahn.wamp import transport
+from autobahn.wamp.types import ComponentConfig
 from autobahn.wamp.runner import _ApplicationRunner, Connection
+from autobahn.wamp.protocol import _ListenerCollection
 
 import txaio
 txaio.use_twisted()
@@ -100,6 +101,10 @@ def _connect_stream(reactor, cfg, wamp_transport_factory):
     # crossbar.twisted.endpoint.create_connecting_endpoint_from_config
     # into here instead; supports 'tls' option properly...
 
+    if reactor is None:
+        # XXX double-check: this over-writes the local "reactor", right?
+        from twisted.internet import reactor
+
     if isinstance(cfg, six.text_type):
         client = clientFromString(cfg)
 
@@ -150,10 +155,18 @@ def _create_wamp_factory(reactor, cfg, session_factory):
 
     # type in ['websocket', 'rawsocket']
     kind = cfg.get('type', 'websocket')
+
     if kind == 'websocket':
-        return WampWebSocketClientFactory(session_factory, url=cfg['url'])
+        return WampWebSocketClientFactory(
+            session_factory, url=cfg['url'],
+            debug=cfg.get('debug', False),
+            debug_wamp=cfg.get('debug_wamp', False),
+        )
     elif kind == 'rawsocket':
-        return WampRawSocketClientFactory(session_factory)
+        return WampRawSocketClientFactory(
+            session_factory,
+            debug=cfg.get('debug', False),
+        )
     else:
         raise RuntimeError("Unknown WAMP type '{}'".format(kind))
 
@@ -162,21 +175,29 @@ def _create_wamp_factory(reactor, cfg, session_factory):
 # XXX the shutdown hooks being different between asyncio/twisted makes this hard to be generic :(
 @inlineCallbacks
 def connect_to(reactor, transport_config, session):
-    """
+    """:param reactor: the reactor to use (or None for default)
+
     :param transport_config: dict containing valid client transport
-    config (see :mod:`autobahn.wamp.transport`)
+    config (see :mod:`autobahn.wamp.transport`) XXX maybe this should
+    just demand an actual Factory? or accept either a dict (==config)
+    or an IFactory provider? (to be consistent with asking for a
+    straight ISession, instead of config)
 
     :param session: an ISession (e.g. ApplicationSession subclass)
 
     :returns: Deferred that callbacks with a protocol instance after a
     connection has been made (not necessarily a WAMP session joined
     yet, however)
+
     """
 
     def create():
         return session
 
-    transport_factory = _create_wamp_factory(reactor, transport_config, create)
+    if IProtocolFactory.providedBy(transport_config):
+        transport_factory = transport_config
+    else:
+        transport_factory = _create_wamp_factory(reactor, transport_config, create)
 
     if 'endpoint' in transport_config:
         endpoint = transport_config['endpoint']
@@ -203,16 +224,31 @@ def connect_to(reactor, transport_config, session):
 
 
 class ApplicationRunner(_ApplicationRunner):
-    """
-    Provides a high-level API that is (mostly) consistent across
-    asyncio and Twisted code.
+    """Provides a high-level API that is (mostly) consistent across
+    asyncio and Twisted code. This starts the event-loop/reactor,
+    starts logging and provides a place to put all your configuration
+    information.
 
     If you want more control over the reactor and logging, see the
-    :class:`Connection` class.
+    :class:`Connection` class, a lower-level interface (which is
+    itself used by this class).
 
-    If you need lower-level control than that, see :meth:`connect_to`
-    which attempts a single connection to a single transport.
+    If you need even lower-level control than that, see
+    :meth:`connect_to` which attempts a single connection to a single
+    transport.
+
+    There is a single event this class emits upon which you may
+    listen, and that is ``connection`` which is fired whenever a new
+    Connection instance is created; this receives a single argument:
+    the new instance. You can use this event to add listeners on the
+    ``connection.session`` instance, which will be an
+    ``ApplicationSession`` (or subclass) instance.
     """
+
+    def __init__(self, transports=None):
+        self.on = _ListenerCollection(['connection'])
+
+        self._transports = transports
 
     # XXX maybe we want to change this since right now there's not
     # really a good way to start multiple sessions with
@@ -222,7 +258,8 @@ class ApplicationRunner(_ApplicationRunner):
     #  - run() takes no args and runs all Connections in our list (i.e. get rid of start_reactor=False)
     #  - add_session could return the Connection instance, so if caller wants it they can have it
     #  - (or add_session just takes a session instance/nothing [default: ApplicationSession]?)
-    def run(self, session_factory, start_reactor=True):
+    #  - additionally, this would get rid of the need for the 'connection' or similar event...
+    def run(self, session_factory, realm, extra=None, start_reactor=True):
         """
         Run an application component.
 
@@ -256,10 +293,13 @@ class ApplicationRunner(_ApplicationRunner):
         # Connection(..).open() and then you can start logging however you want...?
         txaio.start_logging(out=sys.stdout, level='info')
 
+        session = session_factory(ComponentConfig(realm=realm, extra=extra))
         connection = Connection(
-            self._create_session(),
-            self.transports,
+            session,
+            self._transports,
+            reactor,
         )
+        self.on.connection._notify(connection)
 
         # if the user didn't ask us to start the reactor, then they
         # get to deal with any connect errors themselves.
@@ -281,7 +321,7 @@ class ApplicationRunner(_ApplicationRunner):
                     reactor.stop()
 
             def startup():
-                d = connection.open(reactor)
+                d = connection.open()
                 d.addErrback(connect_error)
                 d.addBoth(shutdown)
             reactor.callWhenRunning(startup)
