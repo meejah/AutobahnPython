@@ -31,6 +31,7 @@ import txaio
 from autobahn.websocket.protocol import parseWsUrl
 
 
+# XXX everything in here can (and should) have a unit-test
 def check(transport, listen=False):
     """
     :param listen: True if this transport will be used for listening
@@ -46,18 +47,21 @@ def check(transport, listen=False):
 
     :returns: True if this is a valid WAMP transport, or an exception otherwise
     """
-    # XXX use if's and real exception instead of assert()s
     for key in transport.keys():
-        assert key in ['type', 'url', 'endpoint', 'debug', 'debug_wamp']
+        # XXX actually, get rid of "debug_app" entirely? (or, at least make the default True!)
+        if key not in ['type', 'url', 'endpoint', 'debug', 'debug_wamp', 'debug_app']:
+            raise Exception("Unknown key '{}' in transport config".format(key))
 
     kind = transport.get('type', 'websocket')
-    assert kind in ['websocket', 'rawsocket']
+    if kind not in ['websocket', 'rawsocket']:
+        raise Exception("Unknown transport type '{}'".format(kind))
 
     if 'url' in transport:
         assert(type(transport['url']) == six.text_type)
 
     if kind == 'websocket':
-        assert 'url' in transport
+        if not 'url' in transport:
+            raise Exception("'url' is required in transport")
         is_secure, host, port, resource, path, params = parseWsUrl(transport['url'])
         if not is_secure and 'tls' in transport:
             raise RuntimeError(
@@ -86,8 +90,6 @@ def check_retry(cfg):
     return True
 
 
-# XXX could also allow "endpoint" to be a string, and if so
-# treat it as a Twisted endpoint-string?
 def check_endpoint(endpoint, listen=False):
     """
     :param listen: True if this transport will be used for listening
@@ -96,28 +98,43 @@ def check_endpoint(endpoint, listen=False):
 
         A dict defining a network endpoint, consisting of the following keys:
 
-    - type: "tcp" or "unix" (default: tcp)
-    - port: (mandatory for TCP) any valid port number
-    - version: "4" or "6" (default: 4)
-    - host: (non-listen only) the host to connect to (or IP address)
-    - interface: (optional; TCP listen only) explicit interface to listen on (default: any)
-    - backlog: (optional; listen only) accept-queue depth (default: 50)
-    - timeout: (optional; non-listen only) connection timeout in seconds (default: 10)
-    - shared: (optional; TCP listen only) share socket amongst other processes (default: False)
-    - tls: (optional; TCP only) dict of TLS options
+        - type: "tcp" or "unix" (default: tcp)
+        - port: (mandatory for TCP) any valid port number
+        - version: "4" or "6" (default: 4)
+        - host: (non-listen only) the host to connect to (or IP address)
+        - interface: (optional; TCP listen only) explicit interface to listen on (default: any)
+        - backlog: (optional; listen only) accept-queue depth (default: 50)
+        - timeout: (optional; non-listen only) connection timeout in seconds (default: 10)
+        - shared: (optional; TCP listen only) share socket amongst other processes (default: False)
+        - tls: (optional; TCP only) dict of TLS options
+
+        If using Twisted, a "endpoint" can be any object providing
+        IStreamClientEndpoint *or* a string that ``clientFromString``
+        can parse (or the server equivalents if ``listen`` is True).
 
     :returns: True if this is a valid endpoint, or an exception otherwise
     """
 
     if txaio.using_twisted:
+        from twisted.internet.endpoints import clientFromString, serverFromString
+        from twisted.internet.interfaces import IStreamClientEndpoint, IStreamServerEndpoint
+
         if isinstance(endpoint, six.text_type):
-            # XXX FIXME can we ask Twisted "is this a valid
-            # client-config", or do we have to just call
-            # clientFromString() and catch?
+            # I don't belive there's any limit to what exceptions this
+            # might throw, as they're pluggable...
+            try:
+                if listen:
+                    serverFromString(endpoint)
+                else:
+                    clientFromString(endpoint)
+                return True
+            except Exception:
+                return False
+
+        if listen and IStreamServerEndpoint.providedBy(endpoint):
             return True
 
-        from twisted.internet.interfaces import IStreamClientEndpoint
-        if IStreamClientEndpoint.providedBy(endpoint):
+        if not listen and IStreamClientEndpoint.providedBy(endpoint):
             return True
 
     valid_keys = [
@@ -125,32 +142,44 @@ def check_endpoint(endpoint, listen=False):
         'tls', 'path', 'host',
     ]
     for key in endpoint.keys():
-        assert key in valid_keys, "Invalid key '{}'".format(key)
+        if key not in valid_keys:
+            raise Exception("Invalid endpoint key '{}'".format(key))
 
     kind = endpoint.get('type', 'tcp')
-    assert kind in ['tcp', 'unix']
+    if kind not in ['tcp', 'unix']:
+        raise Exception("Unknown endpoint kind '{}'".format(kind))
+
     if kind == 'tcp':
-        assert 'path' not in endpoint
+        if 'path' in endpoint:
+            raise Exception("'tcp' endpoints do not accept 'path'")
         if not listen:
-            assert 'host' in endpoint
-            assert 'interface' not in endpoint
+            if 'host' not in endpoint:
+                raise Exception("Client endpoints require 'host'")
+            if 'interface' in endpoint:
+                raise Exception("Client endpoints do not accept 'interface'")
         version = endpoint.get('version', 4)
-        assert version in [4, 6]
+        if version not in [4, 6]:
+            raise Exception("Only TCP versions 4 or 6 accepted")
     else:
         for x in ['host', 'port', 'interface', 'tls', 'shared', 'version']:
-            assert x not in endpoint
-        assert 'path' in endpoint
+            if x in endpoint:
+                raise Exception("'{}' not accepted for unix endpoint")
+
+        if 'path' not in endpoint:
+            raise Exception("unix endpoints require 'path'")
         if 'tls' in endpoint:
             raise RuntimeError("No TLS in Unix sockets")
 
     timeout = float(endpoint.get('timeout', 10))
-    assert timeout > 0.0
+    if timeout <= 0.0:
+        raise Exception("Invalid timeout '{}'".format(timeout))
 
     if listen:
-        assert 'timeout' not in endpoint
+        if 'timeout' in endpoint:
+            raise Exception("'timeout' not accepted for listening endpoints")
     else:
-        assert 'backlog' not in endpoint
-        assert 'shared' not in endpoint
-        assert 'interface' not in endpoint
+        for key in ['backlog', 'shared', 'interface']:
+            if key in endpoint:
+                raise Exception("'{}' not accepted for client endpoints")
 
     return True

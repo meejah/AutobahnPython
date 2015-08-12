@@ -40,29 +40,29 @@ from autobahn.wamp import transport
 from autobahn.wamp.exception import TransportLost
 from autobahn.websocket.protocol import parseWsUrl
 
-# XXX move to transport?
+# XXX move to transport? protocol
 # XXX should at least move to same file as the "connect_to" things?
 class Connection(object):
-    """
-    This represents configuration of a protocol and transport to make
+    """This represents configuration of a protocol and transport to make
     a WAMP connection to particular endpoints.
 
      - a WAMP protocol is "websocket" or "rawsocket"
      - the transport is TCP4, TCP6 (with or without TLS) or Unix socket.
-     - both ``.protocol`` and ``.transport`` are "native"
-       objects. That is, if you're using Twisted ``.protocol`` will be
-       an IProtocol whereas it will be a BaseProtocol subclass under
-       asyncio
+     - ``.protocol`` is a "native" objects. That is, it might be
+       autobahn.twisted.wamp.WampWebSocketClientProtocol if you're
+       using Twisted (and a websocket protocol)
 
-    This class handles the lifecycles of the underlying transport/protocol
-    pair, providing notifications of transitions.
+    This class handles the lifecycles of the underlying
+    session/protocol pair. To get notifications of connection /
+    disconnect and join / leave, add listeners on the underlying
+    ISession object (``.session``)
 
-    XXX make docs generic between tx/asyncio if this is generic
-
-    If :class:`ApplicationRunner <autobahn.twisted.wamp.ApplicationRunner`
-    API is too high-level for your use-case, Connection lets you set
-    up your own logging, call ``reactor.run()`` yourself,
-    etc. ApplicationRunner in fact simply uses Connection internally.
+    If :class:`ApplicationRunner
+    <autobahn.twisted.wamp.ApplicationRunner` API is too high-level
+    for your use-case, Connection lets you set up your own logging,
+    call ``reactor.run()`` yourself, etc. ApplicationRunner in fact
+    simply uses Connection internally. ApplicationRunner is the
+    recommended API.
 
     :ivar protocol: current protocol instance, or ``None``
     :type protocol: tx:`twisted.internet.interfaces.IProtocol` or ``BaseProtocol`` subclass
@@ -73,17 +73,16 @@ class Connection(object):
     :ivar connect_count: how many times we've successfully connected
         ("connected" at the transport level, *not* WAMP session "onJoin"
         level)
+    :type connect_count: int
+
+    :ivar attempt_count: how many times we've attempted to connect
+    :type attempt_count: int
+
     """
 
-    # XXX if we keep session_factory here, we need event-forwarding
-    # thing to connect session events when it's finally created...
-
-    # XXX OR, we define a "created" event (only) here, that receives
-    # the conenction (or session?) object, and the user can then add
-    # their own leave/etc handlers...
-
-    # XXX should 'transports' be something lower-level, then? And
-    # leave "configuration via dicts" for ApplicationRunner?
+    # XXX I decided to pass a actualy "session" instance (instead of
+    # session_factory) so that adding listeners is easier, and because
+    # it only ever got called once anyway.
     def __init__(self, session, transports, loop=None):
         """
         :param session: an ApplicationSession (or subclass) instance.
@@ -91,7 +90,7 @@ class Connection(object):
         :param transports: a list of dicts configuring available
             transports. See :meth:`autobahn.wamp.transport.check` for
             valid keys
-        :type transports: list of dicts
+        :type transports: list (of dicts)
 
         :param loop: reactor/event-loop instance (or None for a default one)
         :type loop: IReactorCore (Twisted) or EventLoop (asyncio)
@@ -119,27 +118,39 @@ class Connection(object):
             from autobahn.asyncio.wamp import connect_to
         self._connect_to = connect_to
 
+        # the reactor or asyncio event-loop
         self._loop = loop
 
     def open(self):
         """
-        Starts connecting (possibly also re-connecting) and returns a
-        Deferred/Future that fires (with None) only after the session
-        disconnects.
+        Starts connecting (possibly also re-connecting, if configured) and
+        returns a Deferred/Future that fires (with None) only after
+        the session disconnects.
 
         This future will fire with an error if we:
 
-          1. can't connect at all
+          1. can't connect at all, or;
           2. connect, but the connection closes uncleanly
         """
-        # XXX for now, all we look at is the first transport! ...this
-        # will get fixed with retry-logic
 
         if self._connecting is not None:
             raise RuntimeError("Already connecting.")
 
+        # XXX for now, all we look at is the first transport! ...this
+        # will get fixed with retry-logic
         transport_config = next(self._transport_gen)
+        # we check in the ctor, but only if it was a list; so we MUST
+        # double-check the configuration here in case we had an
+        # iterator.
         transport.check(transport_config, listen=False)
+
+        # XXX sort of a philosophical question here -- do we
+        # "let"/force the user to set .debug_app on their ISession by
+        # their lonesome, or do we "overwrite" it with the
+        # transport-config...? I'm trying to be a bit careful here and
+        # not mess with it if it's already True...
+        if not self.session.debug_app:
+            self.session.debug_app = transport_config.get('debug_app', False)
 
         self.attempt_count += 1
         self._done = txaio.create_future()
@@ -151,8 +162,13 @@ class Connection(object):
         )
 
         def on_error(fail):
-            print("Error connecting to '{}': {}".format(
-                json.dumps(transport_config), fail))
+            # XXX do we need to self._done.errback() here?
+            try:
+                nice_config = json.dumps(transport_config)
+            except Exception:
+                nice_config = str(transport_config)
+            print("Error connecting to '{}': {}".format(nice_config, fail))
+            fail.printTraceback()
             return fail
 
         def on_success(proto):
@@ -196,6 +212,8 @@ class Connection(object):
             self._done.callback(None)
         else:
             self._done.errback(Exception('Transport disconnected uncleanly'))
+        self._connecting = None
+        self._done = None
 
     def __str__(self):
         return "<Connection session={} protocol={} attempts={} connected={}>".format(
