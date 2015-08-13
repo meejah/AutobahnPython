@@ -232,7 +232,6 @@ class _Listener(object):
     callbacks and invoke them wherever we need listeners...
     """
 
-    # XXX name? can we auto-extract it from var-name?
     def __init__(self):
         self._listeners = set()
 
@@ -485,7 +484,10 @@ class ApplicationSession(BaseSession):
 
             elif isinstance(msg, message.Abort):
 
-                # fire callback and close the transport
+                # fire callback
+                # note: we do not close the transport here as the WAMP
+                # session joining/leaving is independant from the
+                # transport
                 details = types.CloseDetails(msg.reason, msg.message)
 
                 d = self.on.leave._notify(self)
