@@ -26,10 +26,13 @@
 
 from __future__ import absolute_import, print_function
 
-## XXX trying to factor out common ApplicationRunner stuff for
-## asyncio/twisted
+try:
+    from types import StringType, ListType
+except ImportError:
+    # python3 doesn't have StringType, ListType in the types module
+    StringType = str
+    ListType = list
 
-from types import StringType, ListType
 from functools import wraps
 import itertools
 import json
@@ -38,6 +41,7 @@ import txaio
 
 from autobahn.wamp import transport
 from autobahn.wamp.exception import TransportLost
+from autobahn.wamp.protocol import _ListenerCollection
 from autobahn.websocket.protocol import parseWsUrl
 
 # XXX move to transport? protocol
@@ -103,6 +107,7 @@ class Connection(object):
         self.session = session
         self.connect_count = 0
         self.attempt_count = 0
+        self.on = _ListenerCollection(['connection'])
 
         # private state / configuration
         self._connecting = None  # a Deferred/Future while connecting
@@ -144,11 +149,6 @@ class Connection(object):
         # iterator.
         transport.check(transport_config, listen=False)
 
-        # XXX sort of a philosophical question here -- do we
-        # "let"/force the user to set .debug_app on their ISession by
-        # their lonesome, or do we "overwrite" it with the
-        # transport-config...? I'm trying to be a bit careful here and
-        # not mess with it if it's already True...
         if not self.session.debug_app:
             self.session.debug_app = transport_config.get('debug_app', False)
 
@@ -162,13 +162,10 @@ class Connection(object):
         )
 
         def on_error(fail):
-            # XXX do we need to self._done.errback() here?
-            try:
-                nice_config = json.dumps(transport_config)
-            except Exception:
-                nice_config = str(transport_config)
-            print("Error connecting to '{}': {}".format(nice_config, fail))
-            fail.printTraceback()
+            # XXX would it aid debugging if we re-threw a (new)
+            # exception with the transport that's failing?
+            self.protocol = None
+            txaio.reject(self._done, fail)
             return fail
 
         def on_success(proto):
@@ -199,19 +196,15 @@ class Connection(object):
                 return self.protocol.is_closed
 
             except TransportLost:
-                # mimicing JS API, but...
-                # XXX is this really an error? could just ignore it ...
-                # or should provide ".is_open()" so you can avoid errors :/
-                #raise RuntimeError('Connection already closed.')
                 f = txaio.create_future()
                 txaio.resolve(f, None)
                 return f
 
     def _on_disconnect(self, reason):
         if reason == 'closed':
-            self._done.callback(None)
+            txaio.resolve(self._done, None)
         else:
-            self._done.errback(Exception('Transport disconnected uncleanly'))
+            txaio.reject(self._done, Exception('Transport disconnected uncleanly'))
         self._connecting = None
         self._done = None
 
@@ -273,10 +266,10 @@ class _ApplicationRunner(object):
         self.debug_wamp = debug_wamp
         self.debug_app = debug_app
 
-        if type(url_or_transports) in [StringType, six.text_type]:
+        if isinstance(url_or_transports, (six.text_type, StringType)):
             # XXX emit deprecation-warning? is it really deprecated?
             _, host, port, _, _, _ = parseWsUrl(url_or_transports)
-            self.transports = [{
+            self._transports = [{
                 "type": "websocket",
                 "url": unicode(url_or_transports),
                 "endpoint": {
@@ -287,14 +280,14 @@ class _ApplicationRunner(object):
             }]
         else:
             # XXX shall we also handle "passing a single dict" instead of 1-entry list?
-            self.transports = url_or_transports
+            self._transports = url_or_transports
 
         # validate the transports we have ... but not if they're an
         # iterable. this gives feedback right away for invalid
         # transports if you passed a list, but lets you pass a
         # generator etc. instead if you want
-        if type(self.transports) is ListType:
-            for cfg in self.transports:
+        if isinstance(self._transports, ListType):
+            for cfg in self._transports:
                 transport.check(cfg, listen=False)
 
     def run(self, session_factory, **kw):

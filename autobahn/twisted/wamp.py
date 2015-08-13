@@ -45,7 +45,6 @@ from autobahn.wamp import protocol
 from autobahn.wamp import transport
 from autobahn.wamp.types import ComponentConfig
 from autobahn.wamp.runner import _ApplicationRunner, Connection
-from autobahn.wamp.protocol import _ListenerCollection
 
 import txaio
 txaio.use_twisted()
@@ -87,7 +86,6 @@ class ApplicationSessionFactory(protocol.ApplicationSessionFactory):
     """
 
 
-# XXX this would need an asyncio vs Twisted impl if going that route ...
 def _connect_stream(reactor, cfg, wamp_transport_factory):
     """
     Internal helper.
@@ -110,9 +108,6 @@ def _connect_stream(reactor, cfg, wamp_transport_factory):
 
     elif IStreamClientEndpoint.providedBy(cfg):
         client = IStreamClientEndpoint(cfg)
-        # XXX doing ^ allows us to get rid of the "ssl" vs "tls"
-        # options, too; if you want to provide a native object you
-        # have to pass an IStreamClientEndpoint as the config?
 
     else:
         if cfg['type'] == 'unix':
@@ -122,7 +117,7 @@ def _connect_stream(reactor, cfg, wamp_transport_factory):
         elif cfg['type'] == 'tcp':
             if cfg.get('version', 4) == 4:
                 if 'tls' in cfg:
-                    # XXX FIXME
+                    # XXX FIXME (port crossbar stuff that does this properly)
                     from twisted.internet.endpoints import SSL4ClientEndpoint
                     assert context_factory is not None
                     client = SSL4ClientEndpoint(reactor, cfg['host'], cfg['port'])
@@ -244,11 +239,6 @@ class ApplicationRunner(_ApplicationRunner):
     ``connection.session`` instance, which will be an
     ``ApplicationSession`` (or subclass) instance.
     """
-
-    def __init__(self, transports=None):
-        self.on = _ListenerCollection(['connection'])
-
-        self._transports = transports
 
     # XXX maybe we want to change this since right now there's not
     # really a good way to start multiple sessions with

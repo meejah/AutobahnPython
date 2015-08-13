@@ -254,7 +254,8 @@ class _Listener(object):
         """
         Calls all listeners with the specified args.
 
-        Returns a Deferred which callbacks XXX
+        Returns a Deferred which callbacks when all the listeners
+        which return Deferreds/Futures have themselves completed.
         """
         calls = []
 

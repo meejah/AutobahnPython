@@ -143,7 +143,7 @@ def _create_wamp_factory(reactor, cfg, session_factory):
 
 
 @asyncio.coroutine
-def connect_to(loop, transport_config, session_factory, realm, extra, on_error=None):
+def connect_to(loop, transport_config, session):
     """
     :param transport_config: dict containing valid client transport
     config (see :mod:`autobahn.wamp.transport`)
@@ -152,26 +152,13 @@ def connect_to(loop, transport_config, session_factory, realm, extra, on_error=N
     returns a new ISession instance (usually simply your
     ApplicationSession subclass)
 
-    :param on_error: a callable that takes an Exception, called if we
-    get an error connecting
-
     :returns: Future that callbacks with a protocol instance after a
     connection has been made (not necessarily a WAMP session joined
     yet, however)
     """
 
     def create():
-        try:
-            session = session_factory(ComponentConfig(realm, extra))
-            # XXX FIXME session.debug_app = self.debug_app
-            return session
-
-        except Exception as e:
-            if on_error:
-                on_error(e)
-            else:
-                log.err("Exception while creating session: {0}".format(e))
-            raise
+        return session
 
     transport_factory = _create_wamp_factory(loop, transport_config, create)
     f0 = _connect_stream(loop, transport_config['endpoint'], transport_factory)
@@ -227,20 +214,15 @@ class ApplicationRunner(_ApplicationRunner):
             # signals are not available on Windows
             pass
 
+        session = session_factory(ComponentConfig(realm=self.realm, extra=self.extra))
         self.connection = Connection(
-            session_factory,
-            self.transports,
-            self.realm,
-            self.extra,
+            session,
+            self._transports,
+            loop,
         )
 
-        def on_error(e):
-            if e is not None:
-                print("Error:", e)
-        self.connection.add_event(Connection.ERROR, on_error)
-
         # synchronously start the protocol (retry logic to come)
-        protocol = loop.run_until_complete(self.connection.open(loop))
+        protocol = loop.run_until_complete(self.connection.open())
 
         # now enter the asyncio event loop
         try:
