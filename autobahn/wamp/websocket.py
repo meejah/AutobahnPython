@@ -81,7 +81,7 @@ class WampWebSocketProtocol(object):
                     print("WAMP-over-WebSocket transport lost: wasClean = {0}, code = {1}, reason = '{2}'".format(wasClean, code, reason))
                 self._session.onClose(wasClean)
             except Exception:
-                self.logger.failure("While calling onClose()")
+                self.logger.critical("While calling onClose()")
             self._session = None
 
     def onMessage(self, payload, isBinary):
@@ -95,7 +95,7 @@ class WampWebSocketProtocol(object):
                 self._session.onMessage(msg)
 
         except ProtocolError as e:
-            self.logger.failure("While calling onMessage")
+            self.logger.critical("While calling onMessage")
             reason = "WAMP Protocol Error ({0})".format(e)
             self._bailout(protocol.WebSocketProtocol.CLOSE_STATUS_CODE_PROTOCOL_ERROR, reason=reason)
 
