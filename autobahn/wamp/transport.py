@@ -48,8 +48,7 @@ def check(transport, listen=False):
     :returns: True if this is a valid WAMP transport, or an exception otherwise
     """
     for key in transport.keys():
-        # XXX actually, get rid of "debug_app" entirely? (or, at least make the default True!)
-        if key not in ['type', 'url', 'endpoint', 'debug', 'debug_wamp', 'debug_app']:
+        if key not in ['type', 'url', 'endpoint']:
             raise Exception("Unknown key '{}' in transport config".format(key))
 
     kind = transport.get('type', 'websocket')
@@ -107,7 +106,7 @@ def check_endpoint(endpoint, listen=False):
         from twisted.internet.endpoints import clientFromString, serverFromString
         from twisted.internet.interfaces import IStreamClientEndpoint, IStreamServerEndpoint
 
-        if isinstance(endpoint, six.text_type):
+        if isinstance(endpoint, (str, six.text_type)):
             # I don't belive there's any limit to what exceptions this
             # might throw, as they're pluggable...
             try:

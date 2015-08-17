@@ -36,6 +36,7 @@ import six
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet.error import ConnectionDone
 from twisted.internet.interfaces import IStreamClientEndpoint, IProtocolFactory
+from twisted.internet.endpoints import clientFromString, serverFromString
 
 from autobahn.websocket.protocol import parseWsUrl
 from autobahn.twisted.util import sleep
@@ -103,8 +104,8 @@ def _connect_stream(reactor, cfg, wamp_transport_factory):
         # XXX double-check: this over-writes the local "reactor", right?
         from twisted.internet import reactor
 
-    if isinstance(cfg, six.text_type):
-        client = clientFromString(cfg)
+    if isinstance(cfg, (str, six.text_type)):
+        client = clientFromString(reactor, cfg)
 
     elif IStreamClientEndpoint.providedBy(cfg):
         client = IStreamClientEndpoint(cfg)
@@ -249,7 +250,7 @@ class ApplicationRunner(_ApplicationRunner):
     #  - add_session could return the Connection instance, so if caller wants it they can have it
     #  - (or add_session just takes a session instance/nothing [default: ApplicationSession]?)
     #  - additionally, this would get rid of the need for the 'connection' or similar event...
-    def run(self, session_factory, realm, extra=None, start_reactor=True):
+    def run(self, session_factory, start_reactor=True):
         """
         Run an application component.
 
@@ -283,7 +284,7 @@ class ApplicationRunner(_ApplicationRunner):
         # Connection(..).open() and then you can start logging however you want...?
         txaio.start_logging(out=sys.stdout, level='info')
 
-        session = session_factory(ComponentConfig(realm=realm, extra=extra))
+        session = session_factory(ComponentConfig(realm=self.realm, extra=self.extra))
         connection = Connection(
             session,
             self._transports,
@@ -326,7 +327,7 @@ class ApplicationRunner(_ApplicationRunner):
 
         else:
             # let the caller handle any errors
-            d = connection.open(reactor)
+            d = connection.open()
             # we return a Connection instance ("_" will be IProtocol)
             d.addCallback(lambda _: connection)
             return d
@@ -450,24 +451,17 @@ class Application(object):
         return self.session
 
     def run(self, url=u"ws://localhost:8080/ws", realm=u"realm1",
-            debug=False, debug_wamp=False, debug_app=False,
             start_reactor=True):
         """
         Run the application.
 
         :param url: The URL of the WAMP router to connect to.
         :type url: unicode
+
         :param realm: The realm on the WAMP router to join.
         :type realm: unicode
-        :param debug: Turn on low-level debugging.
-        :type debug: bool
-        :param debug_wamp: Turn on WAMP-level debugging.
-        :type debug_wamp: bool
-        :param debug_app: Turn on app-level debugging.
-        :type debug_app: bool
         """
-        runner = ApplicationRunner(url, realm,
-                                   debug=debug, debug_wamp=debug_wamp, debug_app=debug_app)
+        runner = ApplicationRunner(url, realm)
         runner.run(self.__call__, start_reactor)
 
     def register(self, uri=None):
@@ -664,9 +658,6 @@ if service:
             self.url = url
             self.realm = realm
             self.extra = extra or dict()
-            self.debug = debug
-            self.debug_wamp = debug_wamp
-            self.debug_app = debug_app
             self.make = make
             service.MultiService.__init__(self)
             self.setupService()
@@ -681,7 +672,6 @@ if service:
             def create():
                 cfg = ComponentConfig(self.realm, self.extra)
                 session = self.make(cfg)
-                session.debug_app = self.debug_app
                 return session
 
             # create a WAMP-over-WebSocket transport client factory

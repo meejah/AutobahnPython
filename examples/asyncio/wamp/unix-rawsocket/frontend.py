@@ -12,10 +12,10 @@ class ClientSession(ApplicationSession):
     @coroutine
     def onJoin(self, details):
         print("Joined", details)
-        sub = yield self.subscribe(self.subscription, "test.sub")
+        sub = yield from self.subscribe(self.subscription, "test.sub")
         print("subscribed", sub)
         print("disconnecting in 5 seconds")
-        yield sleep(5)
+        yield from sleep(5)
         # if you disconnect() then the reconnect logic still keeps
         # trying; if you leave() then it stops trying
         if False:
@@ -26,7 +26,7 @@ class ClientSession(ApplicationSession):
             self.leave()
 
     def onLeave(self, reason):
-        get_event_loop().stop()
+        self.disconnect()
 
     def subscription(self, *args, **kw):
         print("sub:", args, kw)

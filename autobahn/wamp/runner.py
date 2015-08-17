@@ -26,13 +26,6 @@
 
 from __future__ import absolute_import, print_function
 
-try:
-    from types import StringType, ListType
-except ImportError:
-    # python3 doesn't have StringType, ListType in the types module
-    StringType = str
-    ListType = list
-
 from functools import wraps
 import itertools
 import json
@@ -107,7 +100,6 @@ class Connection(object):
         self.session = session
         self.connect_count = 0
         self.attempt_count = 0
-        self.on = _ListenerCollection(['connection'])
 
         # private state / configuration
         self._connecting = None  # a Deferred/Future while connecting
@@ -132,7 +124,7 @@ class Connection(object):
         returns a Deferred/Future that fires (with None) only after
         the session disconnects.
 
-        This future will fire with an error if we:
+        This deferred/future will fire with an error if we:
 
           1. can't connect at all, or;
           2. connect, but the connection closes uncleanly
@@ -148,9 +140,6 @@ class Connection(object):
         # double-check the configuration here in case we had an
         # iterator.
         transport.check(transport_config, listen=False)
-
-        if not self.session.debug_app:
-            self.session.debug_app = transport_config.get('debug_app', False)
 
         self.attempt_count += 1
         self._done = txaio.create_future()
@@ -225,10 +214,7 @@ class _ApplicationRunner(object):
     - autobahn.twisted.asyncio.ApplicationRunner
     """
 
-    # XXX FIXME debug, debug_wamp etc. If we want to keep something
-    # similar, put it in the transport config?
-    def __init__(self, url_or_transports, realm, extra=None,
-                 debug=False, debug_wamp=False, debug_app=False):
+    def __init__(self, url_or_transports, realm, extra=None):
         """
         :param realm: The WAMP realm to join the application session to.
         :type realm: unicode
@@ -249,25 +235,13 @@ class _ApplicationRunner(object):
         :param extra: Optional extra configuration to forward to the
             application component.
         :type extra: any object
-
-        :param debug: Turn on low-level debugging.
-        :type debug: bool
-
-        :param debug_wamp: Turn on WAMP-level debugging.
-        :type debug_wamp: bool
-
-        :param debug_app: Turn on app-level debugging.
-        :type debug_app: bool
         """
 
         self.realm = realm
         self.extra = extra or dict()
-        self.debug = debug
-        self.debug_wamp = debug_wamp
-        self.debug_app = debug_app
+        self.on = _ListenerCollection(['connection'])
 
-        if isinstance(url_or_transports, (six.text_type, StringType)):
-            # XXX emit deprecation-warning? is it really deprecated?
+        if isinstance(url_or_transports, (six.text_type, str)):
             _, host, port, _, _, _ = parseWsUrl(url_or_transports)
             self._transports = [{
                 "type": "websocket",
@@ -280,13 +254,14 @@ class _ApplicationRunner(object):
             }]
         else:
             # XXX shall we also handle "passing a single dict" instead of 1-entry list?
+            # (that is, if url_or_transports is a dict, we don't barf)
             self._transports = url_or_transports
 
         # validate the transports we have ... but not if they're an
         # iterable. this gives feedback right away for invalid
         # transports if you passed a list, but lets you pass a
         # generator etc. instead if you want
-        if isinstance(self._transports, ListType):
+        if isinstance(self._transports, list):
             for cfg in self._transports:
                 transport.check(cfg, listen=False)
 

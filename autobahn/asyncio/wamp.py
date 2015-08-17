@@ -221,12 +221,9 @@ class ApplicationRunner(_ApplicationRunner):
             loop,
         )
 
-        # synchronously start the protocol (retry logic to come)
-        protocol = loop.run_until_complete(self.connection.open())
-
         # now enter the asyncio event loop
         try:
-            loop.run_forever()
+            loop.run_until_complete(self.connection.open())
         except KeyboardInterrupt:
             # wait until we send Goodbye if user hit ctrl-c
             # (done outside this except so SIGTERM gets the same handling)
