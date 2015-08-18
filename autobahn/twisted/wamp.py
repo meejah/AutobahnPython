@@ -27,7 +27,6 @@
 from __future__ import absolute_import, print_function
 
 import inspect
-from types import StringType
 from functools import wraps
 import json
 

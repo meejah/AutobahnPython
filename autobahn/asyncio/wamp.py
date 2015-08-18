@@ -82,9 +82,12 @@ def _create_tcp4_stream_transport(loop, cfg, wamp_transport_factory):
     Creates a TCP4 (possibly with TLS) stream transport.
     """
 
-    is_secure, host, port, resource, path, params = parseWsUrl(cfg['url'])
-    ssl = cfg.get('tls', is_secure)
-    return asyncio.async(loop.create_connection(wamp_transport_factory, host, port, ssl=ssl))
+    return asyncio.async(
+        loop.create_connection(
+            wamp_transport_factory, cfg['host'], cfg['port'],
+            ssl=cfg.get('tls', None)
+        )
+    )
 
 
 def _create_unix_stream_transport(loop, cfg, wamp_transport_factory):
