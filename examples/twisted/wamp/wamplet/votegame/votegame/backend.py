@@ -119,9 +119,6 @@ class VoteGameBackend(ApplicationSession):
 
         print("VoteGame Backend ready!")
 
-    def onDisconnect(self):
-        reactor.stop()
-
 
 def make(config):
     ##

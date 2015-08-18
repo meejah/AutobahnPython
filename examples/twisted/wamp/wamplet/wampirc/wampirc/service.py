@@ -99,9 +99,6 @@ class IRCComponent(ApplicationSession):
 
         print("IRC Bot Backend ready!")
 
-    def onDisconnect(self):
-        reactor.stop()
-
 
 def make(config):
     if config:

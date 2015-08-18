@@ -62,9 +62,6 @@ class Component1(ApplicationSession):
             else:
                 print("Failed to register procedure: {}".format(res.value))
 
-    def onDisconnect(self):
-        reactor.stop()
-
 
 def make(config):
     ##

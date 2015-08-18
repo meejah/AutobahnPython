@@ -56,8 +56,6 @@ class Component(ApplicationSession):
 
     def onDisconnect(self):
         print("disconnected")
-        if reactor.running:
-            reactor.stop()
 
 
 if __name__ == '__main__':
