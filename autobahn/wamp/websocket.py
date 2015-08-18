@@ -30,7 +30,8 @@ import traceback
 
 from autobahn.websocket import protocol
 from autobahn.websocket.types import ConnectionDeny
-from autobahn.wamp.interfaces import ITransport
+from autobahn.websocket import http
+from autobahn.wamp.interfaces import ITransport, ITransportHandler
 from autobahn.wamp.exception import ProtocolError, SerializationError, TransportLost
 
 
@@ -60,6 +61,7 @@ class WampWebSocketProtocol(object):
         # create a new WAMP session and fire off session open callback.
         try:
             self._session = self.factory._factory()
+            assert isinstance(self._session, ITransportHandler)
             self._session.onOpen(self)
         except Exception as e:
             self.log.critical(traceback.format_exc())

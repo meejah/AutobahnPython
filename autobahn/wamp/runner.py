@@ -40,19 +40,20 @@ from autobahn.websocket.protocol import parseWsUrl
 # XXX move to transport? protocol
 # XXX should at least move to same file as the "connect_to" things?
 class Connection(object):
-    """This represents configuration of a protocol and transport to make
+    """
+    This represents configuration of a protocol and transport to make
     a WAMP connection to particular endpoints.
 
      - a WAMP protocol is "websocket" or "rawsocket"
      - the transport is TCP4, TCP6 (with or without TLS) or Unix socket.
-     - ``.protocol`` is a "native" objects. That is, it might be
+     - ``.protocol`` is a "native" object. That is, it might be
        autobahn.twisted.wamp.WampWebSocketClientProtocol if you're
-       using Twisted (and a websocket protocol)
+       using Twisted (and a websocket protocol).
 
-    This class handles the lifecycles of the underlying
-    session/protocol pair. To get notifications of connection /
-    disconnect and join / leave, add listeners on the underlying
-    ISession object (``.session``)
+    This class handles the lifecycles of the underlying session and
+    protocol pair. To get notifications of connection / disconnect and
+    join / leave, add listeners on the underlying ISession object
+    (``.session``)
 
     If :class:`ApplicationRunner
     <autobahn.twisted.wamp.ApplicationRunner` API is too high-level
@@ -64,8 +65,8 @@ class Connection(object):
     :ivar protocol: current protocol instance, or ``None``
     :type protocol: tx:`twisted.internet.interfaces.IProtocol` or ``BaseProtocol`` subclass
 
-    :ivar session: current ApplicationSession instance, or ``None``
-    :type session: class:`autobahn.wamp.protocol.ApplicationSession` subclass
+    :ivar session: current ApplicationSession instance
+    :type session: class:`autobahn.wamp.interfaces.ISession` provider
 
     :ivar connect_count: how many times we've successfully connected
         ("connected" at the transport level, *not* WAMP session "onJoin"
@@ -74,7 +75,6 @@ class Connection(object):
 
     :ivar attempt_count: how many times we've attempted to connect
     :type attempt_count: int
-
     """
 
     # XXX I decided to pass a actualy "session" instance (instead of
@@ -245,7 +245,7 @@ class _ApplicationRunner(object):
             _, host, port, _, _, _ = parseWsUrl(url_or_transports)
             self._transports = [{
                 "type": "websocket",
-                "url": unicode(url_or_transports),
+                "url": six.text_type(url_or_transports),
                 "endpoint": {
                     "type": "tcp",
                     "host": host,

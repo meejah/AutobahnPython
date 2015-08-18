@@ -30,6 +30,10 @@ from twisted.internet.task import react
 
 from autobahn.twisted.util import sleep
 
+if len(sys.argv) > 1:
+    print("There are no options. Use the source. See main() method near bottom.")
+    sys.exit(1)
+
 
 class CrossbarProcessProtocol(ProcessProtocol):
     """
@@ -174,7 +178,7 @@ def main(reactor):
 
     print_banner("Running crossbar.io instance")
     cb_proto = yield start_crossbar()
-    yield sleep(2)  # wait for sockets to be listening
+    yield sleep(2)  # wait for sockets to be listening, hopefully
     if cb_proto.all_done.called:
         raise RuntimeError("crossbar exited already")
 

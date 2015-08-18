@@ -44,7 +44,16 @@ rawsocket_unix_transport = {
     }
 }
 
+websocket_tcp_transport = {
+    "type": "websocket",
+    "url": "ws://localhost:8080/ws",
+    "endpoint": {
+        "type": "tcp",
+        "host": "127.0.0.1",
+        "port": 8080,
+    }
+}
 
 if __name__ == '__main__':
-    runner = ApplicationRunner([rawsocket_unix_transport], u"realm1")
+    runner = ApplicationRunner([websocket_tcp_transport], u"realm1")
     runner.run(ClientSession)
