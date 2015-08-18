@@ -67,9 +67,6 @@ class Component1(ApplicationSession):
             else:
                 print("Failed to register procedure: {}".format(res))
 
-    def onDisconnect(self):
-        asyncio.get_event_loop().stop()
-
 
 def make(config):
     ##

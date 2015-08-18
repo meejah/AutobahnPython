@@ -70,9 +70,6 @@ class Component(ApplicationSession):
         self.runs = 0
         yield from self.test()
 
-    def onDisconnect(self):
-        asyncio.get_event_loop().stop()
-
 
 if __name__ == '__main__':
     runner = ApplicationRunner(

@@ -58,9 +58,6 @@ class Component(ApplicationSession):
         yield from self.subscribe(on_topic2, u'com.myapp.topic2')
         asyncio.get_event_loop().call_later(5, self.leave)
 
-    def onDisconnect(self):
-        asyncio.get_event_loop().stop()
-
 
 if __name__ == '__main__':
     runner = ApplicationRunner(

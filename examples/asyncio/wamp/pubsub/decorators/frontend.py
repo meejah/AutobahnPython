@@ -68,9 +68,6 @@ class Component(ApplicationSession):
     def onEvent2(self, msg):
         print("Got event on topic2: {}".format(msg))
 
-    def onDisconnect(self):
-        asyncio.get_event_loop().stop()
-
 
 if __name__ == '__main__':
     runner = ApplicationRunner(

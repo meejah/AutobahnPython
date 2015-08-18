@@ -63,9 +63,6 @@ class Component(ApplicationSession):
         print("All finished.")
         self.leave()
 
-    def onDisconnect(self):
-        asyncio.get_event_loop().stop()
-
 
 if __name__ == '__main__':
     runner = ApplicationRunner(

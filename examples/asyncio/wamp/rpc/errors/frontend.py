@@ -85,9 +85,6 @@ class Component(ApplicationSession):
 
         yield from self.leave()
 
-    def onDisconnect(self):
-        asyncio.get_event_loop().stop()
-
 
 if __name__ == '__main__':
     runner = ApplicationRunner(
