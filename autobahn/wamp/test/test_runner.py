@@ -29,12 +29,26 @@ from __future__ import absolute_import, print_function
 import os
 import unittest2 as unittest
 
-if os.environ.get('USE_TWISTED', False):
-    from mock import patch
-    from zope.interface import implementer
-    from twisted.internet.interfaces import IReactorTime
+from mock import patch
+from autobahn.wamp.interfaces import ISession
+from autobahn.wamp.protocol import _ListenerCollection
 
-    @implementer(IReactorTime)
+
+class FakeSession(object):
+    def __init__(self, config):
+        self.config = config
+        self.on = _ListenerCollection(['join', 'leave', 'ready', 'connect', 'disconnect'])
+ISession.register(FakeSession)
+
+
+if os.environ.get('USE_TWISTED', False):
+    from autobahn.twisted.wamp import ApplicationRunner
+    from twisted.internet.defer import maybeDeferred
+    from twisted.internet.interfaces import IReactorTime, IReactorCore
+    from twisted.internet.error import ConnectionRefusedError
+    from zope.interface import implementer
+
+    @implementer(IReactorTime, IReactorCore)
     class FakeReactor(object):
         '''
         This just fakes out enough reactor methods so .run() can work.
@@ -46,9 +60,11 @@ if os.environ.get('USE_TWISTED', False):
             self.stop_called = False
             self.to_raise = to_raise
             self.delayed = []
+            self.when_running = []
 
         def run(self, *args, **kw):
-            raise self.to_raise
+            for d in self.when_running:
+                d.errback(self.to_raise)
 
         def stop(self):
             self.stop_called = True
@@ -57,13 +73,15 @@ if os.environ.get('USE_TWISTED', False):
             self.delayed.append((delay, func, args, kwargs))
 
         def connectTCP(self, *args, **kw):
-            raise RuntimeError("ConnectTCP shouldn't get called")
+            pass
 
         def callWhenRunning(self, method, *args, **kw):
-            return method(*args, **kw)
+            d = maybeDeferred(method, *args, **kw)
+            self.when_running.append(d)
 
+    @patch('autobahn.twisted.wamp.log')
     class TestWampTwistedRunner(unittest.TestCase):
-        def test_connect_error(self):
+        def test_connect_error(self, *args):
             '''
             Ensure the runner doesn't swallow errors and that it exits the
             reactor properly if there is one.
@@ -76,16 +94,17 @@ if os.environ.get('USE_TWISTED', False):
             except ImportError:
                 raise unittest.SkipTest('No twisted')
 
-            runner = ApplicationRunner(u'ws://localhost:1', u'realm')
             exception = ConnectionRefusedError("It's a trap!")
+            mockreactor = FakeReactor(exception)
+            runner = ApplicationRunner('ws://localhost:1', 'realm', loop=mockreactor)
 
-            with patch('twisted.internet.reactor', FakeReactor(exception)) as mockreactor:
-                self.assertRaises(
-                    ConnectionRefusedError,
-                    # pass a no-op session-creation method
-                    runner.run, lambda _: None, start_reactor=True
-                )
-                self.assertTrue(mockreactor.stop_called)
+            self.assertRaises(
+                ConnectionRefusedError,
+                runner.run, FakeSession,
+                start_reactor=True,
+            )
+            self.assertTrue(mockreactor.stop_called)
+
 else:
     # Asyncio tests.
     try:
@@ -119,12 +138,25 @@ else:
             '''
             loop = Mock()
             loop.run_until_complete = Mock(return_value=(Mock(), Mock()))
-            with patch.object(asyncio, 'get_event_loop', return_value=loop):
-                ssl = {}
-                runner = ApplicationRunner(u'ws://127.0.0.1:8080/ws', u'realm',
-                                           ssl=ssl)
-                runner.run('_unused_')
-                self.assertIs(ssl, loop.create_connection.call_args[1]['ssl'])
+            ssl_context = object()
+            transports = [
+                {
+                    "type": "websocket",
+                    "url": "ws://localhost:8080/ws",
+                    "endpoint": {
+                        "type": "tcp",
+                        "host": "127.0.0.1",
+                        "port": 8080,
+                        "tls": ssl_context,
+                    },
+                },
+            ]
+            runner = ApplicationRunner(
+                'ws://127.0.0.1:8080/ws', 'realm',
+                loop=loop,
+            )
+            runner.run(FakeSession)
+            self.assertIs(ssl_context, loop.create_connection.call_args[1]['ssl'])
 
         def test_omitted_SSLContext_insecure(self):
             '''

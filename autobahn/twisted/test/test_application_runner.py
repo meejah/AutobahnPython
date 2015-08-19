@@ -31,34 +31,44 @@ import os
 # need it to exist so we can @patch it out in the tests ...
 from twisted.internet import reactor  # noqa
 from twisted.internet.defer import inlineCallbacks, succeed
+from twisted.internet.interfaces import IStreamClientEndpoint, IProtocolFactory
 from twisted.trial import unittest
 
 from mock import patch, Mock
 
 from autobahn.twisted.wamp import ApplicationRunner
 
+from mock import patch
+from zope.interface import implementer
+from autobahn.twisted.wamp import ApplicationRunner
+
+from autobahn.wamp.test.test_runner import FakeReactor, FakeSession
+
+
 def raise_error(*args, **kw):
     raise RuntimeError("we always fail")
 
 class TestApplicationRunner(unittest.TestCase):
+    @patch('autobahn.twisted.wamp.log')
     @patch('twisted.internet.reactor')
-    def test_runner_default(self, fakereactor):
+    def test_runner_default(self, fakereactor, fakelog):
         fakereactor.connectTCP = Mock(side_effect=raise_error)
-        def call(proc, *args, **kw):
-            return proc(*args, **kw)
-        fakereactor.callWhenRunning = call
-        runner = ApplicationRunner(u'ws://fake:1234/ws', u'dummy realm')
+        runner = ApplicationRunner(u'ws://fake:1234/ws', u'dummy realm', loop=fakereactor)
 
         # we should get "our" RuntimeError when we call run
         self.assertRaises(RuntimeError, runner.run, raise_error)
 
-        # both reactor.run and reactor.stop should have been called
-        self.assertEqual(fakereactor.run.call_count, 1)
-        self.assertEqual(fakereactor.stop.call_count, 1)
+        # making test general; if we got a "run()" we should also
+        # get a "stop()"
+        self.assertEqual(
+            fakereactor.run.call_count,
+            fakereactor.stop.call_count
+        )
 
+    @patch('autobahn.twisted.wamp.log')
     @patch('twisted.internet.reactor')
     @inlineCallbacks
-    def test_runner_no_run(self, fakereactor):
+    def test_runner_no_run(self, fakereactor, fakelog):
         fakereactor.connectTCP = Mock(side_effect=raise_error)
         runner = ApplicationRunner(u'ws://fake:1234/ws', u'dummy realm')
 
@@ -75,8 +85,9 @@ class TestApplicationRunner(unittest.TestCase):
         self.assertEqual(fakereactor.run.call_count, 0)
         self.assertEqual(fakereactor.stop.call_count, 0)
 
+    @patch('autobahn.twisted.wamp.log')
     @patch('twisted.internet.reactor')
-    def test_runner_no_run_happypath(self, fakereactor):
+    def test_runner_no_run_happypath(self, fakereactor, fakelog):
         proto = Mock()
         fakereactor.connectTCP = Mock(return_value=succeed(proto))
         runner = ApplicationRunner(u'ws://fake:1234/ws', u'dummy realm')

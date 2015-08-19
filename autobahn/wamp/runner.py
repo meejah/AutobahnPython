@@ -214,7 +214,7 @@ class _ApplicationRunner(object):
     - autobahn.twisted.asyncio.ApplicationRunner
     """
 
-    def __init__(self, url_or_transports, realm, extra=None):
+    def __init__(self, url_or_transports, realm, extra=None, loop=None):
         """
         :param realm: The WAMP realm to join the application session to.
         :type realm: unicode
@@ -235,11 +235,16 @@ class _ApplicationRunner(object):
         :param extra: Optional extra configuration to forward to the
             application component.
         :type extra: any object
+
+        :param loop: the event-loop/IReactor instance to use
         """
 
         self.realm = realm
         self.extra = extra or dict()
         self.on = _ListenerCollection(['connection'])
+
+        # the reactor or asyncio event-loop
+        self._loop = loop
 
         if isinstance(url_or_transports, (six.text_type, str)):
             _, host, port, _, _, _ = parseWsUrl(url_or_transports)

@@ -61,7 +61,7 @@ class WampWebSocketProtocol(object):
         # create a new WAMP session and fire off session open callback.
         try:
             self._session = self.factory._factory()
-            assert isinstance(self._session, ITransportHandler)
+            # self._session should be an ITransportHandler
             self._session.onOpen(self)
         except Exception as e:
             self.log.critical(traceback.format_exc())

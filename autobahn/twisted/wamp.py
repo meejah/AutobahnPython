@@ -33,8 +33,8 @@ import json
 import six
 
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
-from twisted.internet.error import ConnectionDone
-from twisted.internet.interfaces import IStreamClientEndpoint, IProtocolFactory
+from twisted.internet.error import ConnectionDone, ReactorAlreadyRunning
+from twisted.internet.interfaces import IStreamClientEndpoint, IProtocolFactory, IReactorCore
 from twisted.internet.endpoints import clientFromString, serverFromString
 
 from autobahn.websocket.protocol import parseWsUrl
@@ -272,9 +272,11 @@ class ApplicationRunner(_ApplicationRunner):
             connection is first established (WAMP session not yet
             joined at this point).
         """
-        from twisted.internet import reactor
+        loop = self._loop
+        if loop is None:
+            from twisted.internet import reactor as loop
         txaio.use_twisted()
-        txaio.config.loop = reactor
+        txaio.config.loop = loop
 
         # XXX FIXME should we really start logging automagically? or
         # not... or provide a "start_logging=True" kwarg?
@@ -287,7 +289,7 @@ class ApplicationRunner(_ApplicationRunner):
         connection = Connection(
             session,
             self._transports,
-            reactor,
+            loop,
         )
         self.on.connection._notify(connection)
 
@@ -303,21 +305,24 @@ class ApplicationRunner(_ApplicationRunner):
 
                 def __call__(self, failure):
                     self.exception = failure.value
-                    print(failure.getErrorMessage())
+                    log.failure(failure)
             connect_error = ErrorCollector()
 
             def shutdown(_):
-                if reactor.running:
-                    reactor.stop()
+                try:
+                    IReactorCore(loop).stop()
+                except ReactorAlreadyRunning:
+                    pass
 
             def startup():
                 d = connection.open()
                 d.addErrback(connect_error)
                 d.addBoth(shutdown)
-            reactor.callWhenRunning(startup)
+                return d
+            IReactorCore(loop).callWhenRunning(startup)
 
             # now enter the Twisted reactor loop
-            reactor.run()
+            IReactorCore(loop).run()
 
             # if we exited due to a connection error, raise that to the
             # caller
