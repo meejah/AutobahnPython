@@ -39,11 +39,30 @@ from mock import patch, Mock
 from autobahn.twisted.wamp import ApplicationRunner
 
 from mock import patch
-from zope.interface import implementer
 from autobahn.twisted.wamp import ApplicationRunner
 
 from autobahn.wamp.test.test_runner import FakeReactor, FakeSession
 
+from autobahn.twisted.wamp import ApplicationRunner
+from twisted.internet.error import ConnectionRefusedError
+
+@patch('autobahn.twisted.wamp.log')
+class TestWampTwistedRunner(unittest.TestCase):
+    def test_connect_error(self, *args):
+        '''
+        Ensure the runner doesn't swallow errors and that it exits the
+        reactor properly if there is one.
+        '''
+        exception = ConnectionRefusedError("It's a trap!")
+        mockreactor = FakeReactor(exception)
+        runner = ApplicationRunner('ws://localhost:1', 'realm', loop=mockreactor)
+
+        self.assertRaises(
+            ConnectionRefusedError,
+            runner.run, FakeSession,
+            start_reactor=True,
+        )
+        self.assertTrue(mockreactor.stop_called)
 
 def raise_error(*args, **kw):
     raise RuntimeError("we always fail")
