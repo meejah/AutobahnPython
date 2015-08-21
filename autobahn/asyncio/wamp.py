@@ -75,21 +75,6 @@ class ApplicationSessionFactory(protocol.ApplicationSessionFactory):
     """
 
 
-def _create_tcp4_stream_transport(loop, cfg, wamp_transport_factory):
-    """
-    Internal helper.
-
-    Creates a TCP4 (possibly with TLS) stream transport.
-    """
-
-    return asyncio.async(
-        loop.create_connection(
-            wamp_transport_factory, cfg['host'], cfg['port'],
-            ssl=cfg.get('tls', None)
-        )
-    )
-
-
 def _create_unix_stream_transport(loop, cfg, wamp_transport_factory):
     """
     Internal helper.
@@ -108,14 +93,23 @@ def _connect_stream(loop, cfg, wamp_transport_factory):
     "endpoint" part). Returns Deferred that fires with IProtocol
     """
 
-    if cfg['type'] == 'unix':
+    is_secure, host, port, resource, path, params = parseWsUrl(cfg['url'])
+    ep = cfg['endpoint']
+    if ep['type'] == 'unix':
         f = _create_unix_stream_transport(loop, cfg, wamp_transport_factory)
 
-    elif cfg['type'] == 'tcp':
-        if cfg.get('version', 4) == 4:
-            f = _create_tcp4_stream_transport(loop, cfg, wamp_transport_factory)
+    elif ep['type'] == 'tcp':
+        if ep.get('version', 4) == 4:
+            ssl = is_secure
+            ssl = ep.get('tls', ssl)
+            f = loop.create_connection(
+                    wamp_transport_factory, ep['host'], ep['port'],
+                    ssl=ssl,
+            )
+
         else:
             raise RuntimeError("FIXME: IPv6 asyncio")
+
     else:
         raise RuntimeError("Unknown type='{}'".format(cfg['type']))
 
@@ -145,7 +139,6 @@ def _create_wamp_factory(reactor, cfg, session_factory):
 # shutdown works.
 
 
-@asyncio.coroutine
 def connect_to(loop, transport_config, session):
     """
     :param transport_config: dict containing valid client transport
@@ -164,7 +157,7 @@ def connect_to(loop, transport_config, session):
         return session
 
     transport_factory = _create_wamp_factory(loop, transport_config, create)
-    f0 = _connect_stream(loop, transport_config['endpoint'], transport_factory)
+    f0 = _connect_stream(loop, transport_config, transport_factory)
 
     # mutate the return value of _connect_stream to be just the
     # protocol so that the API of connect_to is the "same" for Twisted
@@ -207,7 +200,9 @@ class ApplicationRunner(_ApplicationRunner):
         """
 
         # set up the event-loop and ensure txaio is using the same one
-        loop = asyncio.get_event_loop()
+        loop = self._loop
+        if loop is None:
+            loop = asyncio.get_event_loop()
         txaio.use_asyncio()
         txaio.config.loop = loop
         try:

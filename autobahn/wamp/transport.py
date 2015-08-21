@@ -62,7 +62,7 @@ def check(transport, listen=False):
         if not 'url' in transport:
             raise Exception("'url' is required in transport")
         is_secure, host, port, resource, path, params = parseWsUrl(transport['url'])
-        if not is_secure and 'tls' in transport:
+        if not is_secure and 'tls' in transport['endpoint'] and transport['endpoint']['tls']:
             raise RuntimeError(
                 '"tls" key conflicts with the "ws:" prefix of the url'
                 ' argument. Did you mean to use "wss:"?'
