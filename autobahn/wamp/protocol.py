@@ -882,6 +882,7 @@ class ApplicationSession(BaseSession):
 
             self._session_id = None
 
+        # XXX do we want to chain these to "d" from if block above?
         d0 = txaio.as_future(self.onDisconnect)
         def do_disconnect(rtn):
             detail = 'closed' if wasClean else 'lost'
