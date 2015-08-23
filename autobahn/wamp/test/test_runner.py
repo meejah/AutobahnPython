@@ -43,6 +43,8 @@ class FakeSession(object):
         self.on = _ListenerCollection(['join', 'leave', 'ready', 'connect', 'disconnect'])
     def onOpen(self, *args, **kw):
         print('onOpen', args, kw)
+    def leave(self, *args, **kw):
+        return txaio.create_future_success(None)
 
 
 ISession.register(FakeSession)
@@ -83,3 +85,38 @@ if os.environ.get('USE_TWISTED', False):
         def callWhenRunning(self, method, *args, **kw):
             d = maybeDeferred(method, *args, **kw)
             self.when_running.append(d)
+
+
+# all tests in here should be "generic" -- that is, use txaio and not
+# use asyncio or twisted imports directly.
+
+class TestConnection(unittest.TestCase):
+
+    def setUp(self):
+        self.config = dict()  # "should" be a ComponentConfig
+        self.session = FakeSession(self.config)
+        # one generic transport for all tests
+        self.transports = [{
+            "type": "websocket",
+            "url": "ws://localhost:9876/ws",
+            "endpoint": {
+                "type": "tcp",
+                "host": "127.0.0.1",
+                "port": 9876,
+            }
+        }]
+        self.connection = Connection(self.session, self.transports)
+
+
+    def test_failed_open(self):
+        # we're not listening on localhost:9876 hopefully
+        d = self.connection.open()
+        d.errback(Exception('foo'))
+        return d
+
+    def test_successful_open(self):
+        # we're not listening on localhost:9876 hopefully
+        d = self.connection.open()
+        d.callback(None)
+        self.connection.close()
+        return d

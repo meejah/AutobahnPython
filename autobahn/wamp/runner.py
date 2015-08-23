@@ -155,7 +155,7 @@ class Connection(object):
             # exception with the transport that's failing?
             self.protocol = None
             txaio.reject(self._done, fail)
-            return fail
+            #return fail
 
         def on_success(proto):
             self.connect_count += 1
