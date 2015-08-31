@@ -35,11 +35,15 @@ import six
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet.error import ConnectionDone, ReactorAlreadyRunning
 from twisted.internet.interfaces import IStreamClientEndpoint, IProtocolFactory, IReactorCore
-from twisted.internet.interfaces import IOpenSSLClientConnectionCreator
 from twisted.internet.endpoints import clientFromString, serverFromString
 from twisted.internet.endpoints import TCP4ClientEndpoint, TCP6ClientEndpoint
-from twisted.internet.endpoints import SSL4ClientEndpoint
-from twisted.internet.ssl import optionsForClientTLS, CertificateOptions
+try:
+    _TLS = True
+    from twisted.internet.endpoints import SSL4ClientEndpoint
+    from twisted.internet.ssl import optionsForClientTLS, CertificateOptions
+    from twisted.internet.interfaces import IOpenSSLClientConnectionCreator
+except ImportError:
+    _TLS = False
 
 from autobahn.websocket.protocol import parseWsUrl
 from autobahn.twisted.util import sleep
@@ -125,6 +129,9 @@ def _connect_stream(reactor, config, wamp_transport_factory):
             if tls is False:
                 tls = None
             if tls:
+                if not _TLS:
+                    raise Exception('TLS configured, but no support'
+                                    ' (is pyOpenSSL installed?)')
                 # we accept Twisted objects here. This must be a
                 # IOpenSSLClientConnectionCreator provider -- as
                 # created, e.g., by
