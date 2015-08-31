@@ -35,7 +35,11 @@ import six
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet.error import ConnectionDone, ReactorAlreadyRunning
 from twisted.internet.interfaces import IStreamClientEndpoint, IProtocolFactory, IReactorCore
+from twisted.internet.interfaces import IOpenSSLClientConnectionCreator
 from twisted.internet.endpoints import clientFromString, serverFromString
+from twisted.internet.endpoints import TCP4ClientEndpoint, TCP6ClientEndpoint
+from twisted.internet.endpoints import SSL4ClientEndpoint
+from twisted.internet.ssl import optionsForClientTLS, CertificateOptions
 
 from autobahn.websocket.protocol import parseWsUrl
 from autobahn.twisted.util import sleep
@@ -86,54 +90,88 @@ class ApplicationSessionFactory(protocol.ApplicationSessionFactory):
     """
 
 
-def _connect_stream(reactor, cfg, wamp_transport_factory):
+def _connect_stream(reactor, config, wamp_transport_factory):
     """
     Internal helper.
 
     Connects the given wamp_transport_factory to a stream endpoint, as
-    determined from the cfg that's passed in (which should be just the
-    "endpoint" part). Returns Deferred that fires with IProtocol
+    determined from the config that's passed in (which should be just the
+    "endpoint" part).
+
+    NOTE this presumes that 'config' has already been checked with
+    :meth:`autobahn.wamp.transport.check`
+
+    Returns Deferred that fires with IProtocol
     """
 
-    # XXX probably want to move/port:
-    # crossbar.twisted.endpoint.create_connecting_endpoint_from_config
-    # into here instead; supports 'tls' option properly...
 
     if reactor is None:
-        # XXX double-check: this over-writes the local "reactor", right?
         from twisted.internet import reactor
 
-    if isinstance(cfg, (str, six.text_type)):
-        client = clientFromString(reactor, cfg)
+    if isinstance(config, (str, six.text_type)):
+        client = clientFromString(reactor, config)
 
-    elif IStreamClientEndpoint.providedBy(cfg):
-        client = IStreamClientEndpoint(cfg)
+    elif IStreamClientEndpoint.providedBy(config):
+        client = IStreamClientEndpoint(config)
 
     else:
-        if cfg['type'] == 'unix':
-            from twisted.internet.endpoints import UNIXClientEndpoint
-            client = UNIXClientEndpoint(reactor, cfg['path'])
+        if config['type'] == 'tcp':
+            version = int(config.get('version', 4))
+            host = str(config['host'])
+            port = int(config['port'])
+            timeout = int(config.get('timeout', 10))  # in seconds
 
-        elif cfg['type'] == 'tcp':
-            if cfg.get('version', 4) == 4:
-                if 'tls' in cfg:
-                    # XXX FIXME (port crossbar stuff that does this properly)
-                    from twisted.internet.endpoints import SSL4ClientEndpoint
-                    assert context_factory is not None
-                    client = SSL4ClientEndpoint(reactor, cfg['host'], cfg['port'])
+            tls = config.get('tls', None)
+            if tls is False:
+                tls = None
+            if tls:
+                # we accept Twisted objects here. This must be a
+                # IOpenSSLClientConnectionCreator provider -- as
+                # created, e.g., by
+                # twisted.internet.ssl.optionsForClientTLS()
+                if IOpenSSLClientConnectionCreator.providedBy(tls):
+                    context = IOpenSSLClientConnectionCreator(tls)
+                elif isinstance(tls, CertificateOptions):
+                    context = tls
+                elif isinstance(tls, dict):
+                    context = optionsForClientTLS(tls['hostname'])
                 else:
-                    from twisted.internet.endpoints import TCP4ClientEndpoint
-                    client = TCP4ClientEndpoint(reactor, cfg['host'], cfg['port'])
+                    raise Exception("Unknown 'tls' option type '{}'".format(type(tls)))
+
+                if version == 4:
+                    endpoint = SSL4ClientEndpoint(
+                        reactor,
+                        host,
+                        port,
+                        context,
+                        timeout=timeout,
+                    )
+                elif version == 6:
+                    raise Exception("TLS on IPv6 not implemented")
+                else:
+                    raise Exception("invalid TCP protocol version {}".format(version))
+
             else:
-                if 'tls' in cfg:
-                    raise RuntimeError("FIXME: TLS over IPv6")
-                from twisted.internet.endpoints import TCP6ClientEndpoint
-                client = TCP6ClientEndpoint(reactor, cfg['host'], cfg['port'])
+                if version == 4:
+                    creator = TCP4ClientEndpoint
+                elif version == 6:
+                    creator = TCP6ClientEndpoint
+                else:
+                    raise Exception("invalid TCP protocol version {}".format(version))
+                endpoint = creator(reactor,
+                                   host,
+                                   port,
+                                   timeout=timeout)
+
+        elif config['type'] == 'unix':
+            path = os.path.abspath(os.path.join(cbdir, config['path']))
+            timeout = int(config.get('timeout', 10))  # in seconds
+            endpoint = UNIXClientEndpoint(reactor, path, timeout=timeout)
+
         else:
-            raise RuntimeError("Unknown type='{}'".format(cfg['type']))
+            raise Exception("invalid endpoint type '{}'".format(config['type']))
 
-    return client.connect(wamp_transport_factory)
-
+        return endpoint.connect(wamp_transport_factory)
 
 # needs custom asycio vs Twisted (because where the imports come from)
 # -- or would have to do "if txaio.using_twisted():" etc switch-type

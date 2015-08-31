@@ -35,6 +35,18 @@ from autobahn.twisted.wamp import ApplicationRunner
 # the example ApplicationSession subclass
 from clientsession import ClientSession
 
+do_tls = True
+if do_tls:
+    from twisted.internet._sslverify import OpenSSLCertificateAuthorities
+    from twisted.internet.ssl import CertificateOptions
+    from OpenSSL import crypto
+    cert = crypto.load_certificate(
+        crypto.FILETYPE_PEM,
+        unicode(open('../pubsub/tls/server.crt', 'r').read())
+    )
+    tls_options = CertificateOptions(
+        trustRoot=OpenSSLCertificateAuthorities([cert]),
+    )
 
 rawsocket_unix_transport = {
     "type": "rawsocket",
@@ -53,6 +65,11 @@ websocket_tcp_transport = {
         "port": 8080,
     }
 }
+if do_tls:
+    websocket_tcp_transport['url'] = "wss://localhost:9983/ws"
+    websocket_tcp_transport['endpoint']['port'] = 9983
+    websocket_tcp_transport['endpoint']['tls'] = tls_options
+    print("\nConfigured for TLS; server should be on {url}\n".format(**websocket_tcp_transport))
 
 if __name__ == '__main__':
     runner = ApplicationRunner([websocket_tcp_transport], u"realm1")

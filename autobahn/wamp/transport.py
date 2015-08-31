@@ -33,6 +33,7 @@ from autobahn.websocket.protocol import parseWsUrl
 if txaio.using_twisted:
     from twisted.internet.endpoints import clientFromString, serverFromString
     from twisted.internet.interfaces import IStreamClientEndpoint, IStreamServerEndpoint
+    from twisted.internet.interfaces import IOpenSSLClientConnectionCreator
 
 
 # XXX everything in here can (and should) have a unit-test
@@ -153,6 +154,22 @@ def check_endpoint(endpoint, listen=False):
         version = endpoint.get('version', 4)
         if version not in [4, 6]:
             raise Exception("Only TCP versions 4 or 6 accepted")
+        tls = endpoint.get('tls', None)
+        if isinstance(tls, dict):
+            for key in ['hostname']:
+                if key not in tls:
+                    raise Exception("Require '{}' for client TLS configuration".format(key))
+            if 'hostname' not in tls:
+                raise Exception("Need hostname for client TLS verification")
+        else:
+            if txaio.using_twisted and IOpenSSLClientConnectionCreator.providedBy(tls):
+                pass
+            elif True:
+                pass
+            elif tls is None:
+                pass
+            else:
+                raise Exception("TLS configuration must be dict or platform-specific object.")
     else:
         for x in ['host', 'port', 'interface', 'tls', 'shared', 'version']:
             if x in endpoint:
