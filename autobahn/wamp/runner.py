@@ -131,7 +131,7 @@ class Connection(object):
         """
 
         if self._connecting is not None:
-            raise RuntimeError("Already connecting.")
+            return txaio.create_future_error(RuntimeError("Already connecting."))
 
         # XXX for now, all we look at is the first transport! ...this
         # will get fixed with retry-logic

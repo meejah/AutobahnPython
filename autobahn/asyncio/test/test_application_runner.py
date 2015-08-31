@@ -28,9 +28,14 @@ from __future__ import absolute_import
 
 import os
 import unittest2 as unittest
+
 import txaio
-from autobahn.wamp.protocol import _ListenerCollection
+
 from autobahn.wamp.runner import Connection
+from autobahn.wamp.protocol import _ListenerCollection
+from autobahn.wamp.interfaces import ISession
+
+from autobahn.asyncio.wamp import ApplicationRunner
 
 # Asyncio tests.
 try:
@@ -50,8 +55,18 @@ except ImportError:
         loop.run_forever()
         asyncio.gather(*asyncio.Task.all_tasks())
 
-from autobahn.asyncio.wamp import ApplicationRunner
-from autobahn.wamp.test.test_runner import FakeSession
+
+class FakeSession(object):
+    def __init__(self, config):
+        self.config = config
+        self.on = _ListenerCollection(['join', 'leave', 'ready', 'connect', 'disconnect'])
+    def onOpen(self, *args, **kw):
+        print('onOpen', args, kw)
+    def leave(self, *args, **kw):
+        return txaio.create_future_success(None)
+
+
+ISession.register(FakeSession)
 
 
 class TestApplicationRunner(unittest.TestCase):
