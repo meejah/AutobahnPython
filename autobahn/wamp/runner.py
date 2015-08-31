@@ -122,9 +122,9 @@ class Connection(object):
         """
         Starts connecting (possibly also re-connecting, if configured) and
         returns a Deferred/Future that fires (with None) only after
-        the session disconnects.
+        the session *and* transports have disconnected.
 
-        This deferred/future will fire with an error if we:
+        This Deferred/Future will fire with an error if we:
 
           1. can't connect at all, or;
           2. connect, but the connection closes uncleanly
@@ -136,9 +136,9 @@ class Connection(object):
         # XXX for now, all we look at is the first transport! ...this
         # will get fixed with retry-logic
         transport_config = next(self._transport_gen)
-        # we check in the ctor, but only if it was a list; so we MUST
-        # double-check the configuration here in case we had an
-        # iterator.
+        # we check configurations in the ctor, but only if it was a
+        # list; so we MUST double-check the configuration here in case
+        # we had an iterator.
         transport.check(transport_config, listen=False)
 
         self.attempt_count += 1
