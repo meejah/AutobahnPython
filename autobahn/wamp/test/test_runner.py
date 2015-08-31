@@ -28,7 +28,7 @@ from __future__ import absolute_import, print_function
 
 import os
 import unittest2 as unittest
-from mock import patch
+from mock import patch, Mock
 
 import txaio
 
@@ -49,11 +49,11 @@ class FakeSession(object):
 
 ISession.register(FakeSession)
 
-
 if os.environ.get('USE_TWISTED', False):
     from zope.interface import implementer
     from twisted.internet.defer import maybeDeferred
     from twisted.internet.interfaces import IReactorTime, IReactorCore
+    from twisted.trial import unittest
 
     @implementer(IReactorTime, IReactorCore)
     class FakeReactor(object):
@@ -70,8 +70,9 @@ if os.environ.get('USE_TWISTED', False):
             self.when_running = []
 
         def run(self, *args, **kw):
-            for d in self.when_running:
-                d.errback(self.to_raise)
+            if self.to_raise:
+                for d in self.when_running:
+                    txaio.reject(d, self.to_raise)
 
         def stop(self):
             self.stop_called = True
@@ -85,38 +86,3 @@ if os.environ.get('USE_TWISTED', False):
         def callWhenRunning(self, method, *args, **kw):
             d = maybeDeferred(method, *args, **kw)
             self.when_running.append(d)
-
-
-# all tests in here should be "generic" -- that is, use txaio and not
-# use asyncio or twisted imports directly.
-
-class TestConnection(unittest.TestCase):
-
-    def setUp(self):
-        self.config = dict()  # "should" be a ComponentConfig
-        self.session = FakeSession(self.config)
-        # one generic transport for all tests
-        self.transports = [{
-            "type": "websocket",
-            "url": "ws://localhost:9876/ws",
-            "endpoint": {
-                "type": "tcp",
-                "host": "127.0.0.1",
-                "port": 9876,
-            }
-        }]
-        self.connection = Connection(self.session, self.transports)
-
-
-    def test_failed_open(self):
-        # we're not listening on localhost:9876 hopefully
-        d = self.connection.open()
-        d.errback(Exception('foo'))
-        return d
-
-    def test_successful_open(self):
-        # we're not listening on localhost:9876 hopefully
-        d = self.connection.open()
-        d.callback(None)
-        self.connection.close()
-        return d

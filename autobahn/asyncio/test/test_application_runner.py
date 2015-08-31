@@ -27,6 +27,10 @@
 from __future__ import absolute_import
 
 import os
+import unittest2 as unittest
+import txaio
+from autobahn.wamp.protocol import _ListenerCollection
+from autobahn.wamp.runner import Connection
 
 # Asyncio tests.
 try:
@@ -47,6 +51,8 @@ except ImportError:
         asyncio.gather(*asyncio.Task.all_tasks())
 
 from autobahn.asyncio.wamp import ApplicationRunner
+from autobahn.wamp.test.test_runner import FakeSession
+
 
 class TestApplicationRunner(unittest.TestCase):
     '''

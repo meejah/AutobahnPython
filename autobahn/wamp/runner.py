@@ -154,8 +154,12 @@ class Connection(object):
             # XXX would it aid debugging if we re-threw a (new)
             # exception with the transport that's failing?
             self.protocol = None
-            txaio.reject(self._done, fail)
-            #return fail
+            # XXX add to txaio a way to ask "is this resolved?"
+            try:
+                # might already be resolved, then we get exception
+                txaio.reject(self._done, fail)
+            except Exception as e:
+                return None
 
         def on_success(proto):
             self.connect_count += 1
