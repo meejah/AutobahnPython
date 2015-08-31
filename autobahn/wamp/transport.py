@@ -30,6 +30,10 @@ import six
 import txaio
 from autobahn.websocket.protocol import parseWsUrl
 
+if txaio.using_twisted:
+    from twisted.internet.endpoints import clientFromString, serverFromString
+    from twisted.internet.interfaces import IStreamClientEndpoint, IStreamServerEndpoint
+
 
 # XXX everything in here can (and should) have a unit-test
 def check(transport, listen=False):
@@ -62,11 +66,12 @@ def check(transport, listen=False):
         if not 'url' in transport:
             raise Exception("'url' is required in transport")
         is_secure, host, port, resource, path, params = parseWsUrl(transport['url'])
-        if not is_secure and 'tls' in transport['endpoint'] and transport['endpoint']['tls']:
-            raise RuntimeError(
-                '"tls" key conflicts with the "ws:" prefix of the url'
-                ' argument. Did you mean to use "wss:"?'
-            )
+        if 'endpoint' in transport:
+            if not is_secure and 'tls' in transport['endpoint'] and transport['endpoint']['tls']:
+                raise RuntimeError(
+                    '"tls" key conflicts with the "ws:" prefix of the url'
+                    ' argument. Did you mean to use "wss:"?'
+                )
 
     if 'endpoint' in transport:
         return check_endpoint(transport['endpoint'], listen=listen)
@@ -103,9 +108,6 @@ def check_endpoint(endpoint, listen=False):
     """
 
     if txaio.using_twisted:
-        from twisted.internet.endpoints import clientFromString, serverFromString
-        from twisted.internet.interfaces import IStreamClientEndpoint, IStreamServerEndpoint
-
         if isinstance(endpoint, (str, six.text_type)):
             # I don't belive there's any limit to what exceptions this
             # might throw, as they're pluggable...
@@ -118,15 +120,19 @@ def check_endpoint(endpoint, listen=False):
             except Exception:
                 return False
 
-        if listen and IStreamServerEndpoint.providedBy(endpoint):
+        if IStreamServerEndpoint.providedBy(endpoint):
+            if not listen:
+                raise Exception("IStreamServerEndpoint only for listening endpoints")
             return True
 
-        if not listen and IStreamClientEndpoint.providedBy(endpoint):
+        if IStreamClientEndpoint.providedBy(endpoint):
+            if listen:
+                raise Exception("IStreamClientEndpoint only for connecting endpoints")
             return True
 
     valid_keys = [
         'type', 'port', 'version', 'interface', 'backlog', 'shared',
-        'tls', 'path', 'host',
+        'tls', 'path', 'host', 'timeout',
     ]
     for key in endpoint.keys():
         if key not in valid_keys:
@@ -154,8 +160,6 @@ def check_endpoint(endpoint, listen=False):
 
         if 'path' not in endpoint:
             raise Exception("unix endpoints require 'path'")
-        if 'tls' in endpoint:
-            raise RuntimeError("No TLS in Unix sockets")
 
     timeout = float(endpoint.get('timeout', 10))
     if timeout <= 0.0:
