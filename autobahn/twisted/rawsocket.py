@@ -31,10 +31,10 @@ import binascii
 from twisted.internet.protocol import Factory
 from twisted.protocols.basic import Int32StringReceiver
 from twisted.internet.error import ConnectionDone
-from twisted.logger import Logger
 
 from autobahn.twisted.util import peer2str
 from autobahn.wamp.exception import ProtocolError, SerializationError, TransportLost
+from autobahn.logger import make_logger
 
 import txaio
 
@@ -45,7 +45,7 @@ __all__ = (
     'WampRawSocketClientFactory'
 )
 
-import txaio
+
 class WampRawSocketProtocol(Int32StringReceiver):
     """
     Base class for Twisted-based WAMP-over-RawSocket protocols.

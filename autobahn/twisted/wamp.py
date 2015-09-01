@@ -27,16 +27,13 @@
 from __future__ import absolute_import, print_function
 
 import inspect
-from functools import wraps
-import json
 
-import six
-
-from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
-from twisted.internet.error import ConnectionDone, ReactorAlreadyRunning
+from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.error import ReactorAlreadyRunning
 from twisted.internet.interfaces import IStreamClientEndpoint, IProtocolFactory, IReactorCore
-from twisted.internet.endpoints import clientFromString, serverFromString
-from twisted.internet.endpoints import TCP4ClientEndpoint, TCP6ClientEndpoint
+from twisted.internet.endpoints import clientFromString, UNIXClientEndpoint
+from twisted.internet.endpoints import TCP4ClientEndpoint
+
 try:
     _TLS = True
     from twisted.internet.endpoints import SSL4ClientEndpoint
@@ -46,11 +43,9 @@ except ImportError:
     _TLS = False
 
 from autobahn.websocket.protocol import parseWsUrl
-from autobahn.twisted.util import sleep
 from autobahn.twisted.websocket import WampWebSocketClientFactory
 from autobahn.twisted.rawsocket import WampRawSocketClientFactory
 from autobahn.wamp import protocol
-from autobahn.wamp import transport
 from autobahn.wamp.types import ComponentConfig
 from autobahn.wamp.runner import _ApplicationRunner, Connection
 
@@ -94,7 +89,7 @@ class ApplicationSessionFactory(protocol.ApplicationSessionFactory):
     """
 
 
-def _connect_stream(reactor, config, wamp_transport_factory):
+def _connect_stream(reactor, config, wamp_transport_factory, hostname=None):
     """
     Internal helper.
 
@@ -105,18 +100,18 @@ def _connect_stream(reactor, config, wamp_transport_factory):
     NOTE this presumes that 'config' has already been checked with
     :meth:`autobahn.wamp.transport.check`
 
+    hostname is only used if the 'tls' option is True
+
     Returns Deferred that fires with IProtocol
     """
-
-
     if reactor is None:
         from twisted.internet import reactor
 
     if isinstance(config, (str, six.text_type)):
-        client = clientFromString(reactor, config)
+        endpoint = clientFromString(reactor, config)
 
     elif IStreamClientEndpoint.providedBy(config):
-        client = IStreamClientEndpoint(config)
+        endpoint = IStreamClientEndpoint(config)
 
     else:
         if config['type'] == 'tcp':
@@ -135,13 +130,14 @@ def _connect_stream(reactor, config, wamp_transport_factory):
                 # we accept Twisted objects here. This must be a
                 # IOpenSSLClientConnectionCreator provider -- as
                 # created, e.g., by
-                # twisted.internet.ssl.optionsForClientTLS()
+                # twisted.internet.ssl.optionsForClientTLS() or a
+                # CertificateOptions instance
                 if IOpenSSLClientConnectionCreator.providedBy(tls):
                     context = IOpenSSLClientConnectionCreator(tls)
                 elif isinstance(tls, CertificateOptions):
                     context = tls
-                elif isinstance(tls, dict):
-                    context = optionsForClientTLS(tls['hostname'])
+                elif tls is True:
+                    context = optionsForClientTLS(hostname)
                 else:
                     raise Exception("Unknown 'tls' option type '{}'".format(type(tls)))
 
@@ -162,6 +158,10 @@ def _connect_stream(reactor, config, wamp_transport_factory):
                 if version == 4:
                     creator = TCP4ClientEndpoint
                 elif version == 6:
+                    try:
+                        from twisted.internet.endpoints import TCP6ClientEndpoint
+                    except ImportError:
+                        raise Exception("No TCP6 support; upgrade Twisted")
                     creator = TCP6ClientEndpoint
                 else:
                     raise Exception("invalid TCP protocol version {}".format(version))
@@ -171,7 +171,7 @@ def _connect_stream(reactor, config, wamp_transport_factory):
                                    timeout=timeout)
 
         elif config['type'] == 'unix':
-            path = os.path.abspath(os.path.join(cbdir, config['path']))
+            path = config['path']
             timeout = int(config.get('timeout', 10))  # in seconds
             endpoint = UNIXClientEndpoint(reactor, path, timeout=timeout)
 
@@ -179,6 +179,7 @@ def _connect_stream(reactor, config, wamp_transport_factory):
             raise Exception("invalid endpoint type '{}'".format(config['type']))
 
         return endpoint.connect(wamp_transport_factory)
+
 
 # needs custom asycio vs Twisted (because where the imports come from)
 # -- or would have to do "if txaio.using_twisted():" etc switch-type
@@ -239,12 +240,12 @@ def connect_to(reactor, transport_config, session):
     else:
         transport_factory = _create_wamp_factory(reactor, transport_config, create)
 
+    _, host, port, _, _, _ = parseWsUrl(transport_config['url'])
     if 'endpoint' in transport_config:
         endpoint = transport_config['endpoint']
     else:
-        _, host, port, _, _, _ = parseWsUrl(transport_config['url'])
         endpoint = dict(host=host, port=port, type='tcp', version=4)
-    proto = yield _connect_stream(reactor, endpoint, transport_factory)
+    proto = yield _connect_stream(reactor, endpoint, transport_factory, hostname=host)
 
     # as the reactor/event-loop shuts down, we wish to wait until we've sent
     # out our "Goodbye" message; leave() returns a Deferred that

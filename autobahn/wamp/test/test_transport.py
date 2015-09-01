@@ -32,6 +32,7 @@ from mock import patch
 
 from autobahn.wamp import transport
 
+
 class TestTransportParsing(unittest.TestCase):
 
     def test_invalid_key(self):

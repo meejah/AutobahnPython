@@ -373,6 +373,7 @@ class ApplicationSession(BaseSession):
         """
         self._transport = transport
         d = txaio.as_future(self.onConnect)
+
         def do_connect(rtn):
             d1 = self.on.connect._notify(self)
             txaio.add_callbacks(d1, lambda _: rtn, None)
@@ -884,6 +885,7 @@ class ApplicationSession(BaseSession):
 
         # XXX do we want to chain these to "d" from if block above?
         d0 = txaio.as_future(self.onDisconnect)
+
         def do_disconnect(rtn):
             detail = 'closed' if wasClean else 'lost'
             d1 = self.on.disconnect._notify(detail)

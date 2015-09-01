@@ -30,19 +30,25 @@ import six
 import txaio
 from autobahn.websocket.protocol import parseWsUrl
 
-_TLS = False
+_TX_TLS = False
+_SSL = False
 if txaio.using_twisted:
     from twisted.internet.endpoints import clientFromString, serverFromString
     from twisted.internet.interfaces import IStreamClientEndpoint, IStreamServerEndpoint
-    from twisted.internet.interfaces import IOpenSSLClientConnectionCreator
 
     try:
-        _TLS = True
-        from twisted.internet.endpoints import SSL4ClientEndpoint
-        from twisted.internet.ssl import optionsForClientTLS, CertificateOptions
+        _TX_TLS = True
+        from twisted.internet.ssl import CertificateOptions
         from twisted.internet.interfaces import IOpenSSLClientConnectionCreator
     except ImportError:
-        _TLS = False
+        _TX_TLS = False
+
+else:
+    try:
+        _SSL = True
+        import ssl
+    except ImportError:
+        _SSL = False
 
 
 # XXX everything in here can (and should) have a unit-test
@@ -73,7 +79,7 @@ def check(transport, listen=False):
         assert(type(transport['url']) == six.text_type)
 
     if kind == 'websocket':
-        if not 'url' in transport:
+        if 'url' not in transport:
             raise Exception("'url' is required in transport")
         is_secure, host, port, resource, path, params = parseWsUrl(transport['url'])
         if 'endpoint' in transport:
@@ -165,15 +171,11 @@ def check_endpoint(endpoint, listen=False):
             raise Exception("Only TCP versions 4 or 6 accepted")
         tls = endpoint.get('tls', None)
         if tls is not None:
-            if not _TLS:
-                raise Exception("TLS configured, but no TLS support (is OpenSSL installed?)")
+            if txaio.using_twisted and not _TX_TLS:
+                raise Exception("TLS configured, but no Twisted TLS support (is OpenSSL installed?)")
 
-            if isinstance(tls, dict):
-                for key in ['hostname']:
-                    if key not in tls:
-                        raise Exception("Require '{}' for client TLS configuration".format(key))
-                if 'hostname' not in tls:
-                    raise Exception("Need hostname for client TLS verification")
+            if tls is True:
+                pass
             else:
                 acceptable = False
                 if txaio.using_twisted:
@@ -183,13 +185,18 @@ def check_endpoint(endpoint, listen=False):
                         acceptable = True
                     else:
                         raise Exception(
-                            "TLS configuration must be dict, "
+                            "TLS configuration must be bool, "
                             "IOpenSSLClientConnectionCreator provider or "
                             "CertificateOptions instance"
                         )
-                else: # using_asyncio
-                    if tls not in [True, False]:
-                        raise Exception("TLS configuration must be a dict or bool")
+                else:  # using_asyncio
+                    acceptable = False
+                    if tls in [True, False]:
+                        acceptable = True
+                    elif isinstance(tls, ssl.SSLContext):
+                        acceptable = True
+                    if not acceptable:
+                        raise Exception("TLS configuration must be a bool or an ssl.SSLContext")
     else:
         for x in ['host', 'port', 'interface', 'tls', 'shared', 'version']:
             if x in endpoint:

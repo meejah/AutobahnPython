@@ -26,7 +26,6 @@
 
 from __future__ import absolute_import
 
-import os
 import unittest2 as unittest
 
 import txaio
@@ -40,13 +39,14 @@ from autobahn.asyncio.wamp import ApplicationRunner
 # Asyncio tests.
 try:
     import asyncio
-    from unittest.mock import patch, Mock
+    from unittest.mock import Mock
     from asyncio.test_utils import run_once
 except ImportError:
     # Trollius >= 0.3 was renamed to asyncio
     # noinspection PyUnresolvedReferences
     import trollius as asyncio
-    from mock import patch, Mock
+    from mock import Mock
+
     def run_once(loop):
         """
         copy-pasta from modern asyncio
@@ -60,8 +60,10 @@ class FakeSession(object):
     def __init__(self, config):
         self.config = config
         self.on = _ListenerCollection(['join', 'leave', 'ready', 'connect', 'disconnect'])
+
     def onOpen(self, *args, **kw):
         print('onOpen', args, kw)
+
     def leave(self, *args, **kw):
         return txaio.create_future_success(None)
 
@@ -139,7 +141,7 @@ class TestApplicationRunner(unittest.TestCase):
         }]
         session = FakeSession(None)
         connection = Connection(session, transports, loop=loop)
-        f = connection.open()
+        connection.open()  # returns future
 
         # annoying, but you have to "do a trip" through the
         # event-loop to get callbacks called on Futures...

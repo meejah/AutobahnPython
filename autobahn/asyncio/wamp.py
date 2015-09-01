@@ -27,12 +27,11 @@
 from __future__ import absolute_import, print_function
 import signal
 
-import six
-
 from autobahn.wamp import protocol
 from autobahn.wamp.types import ComponentConfig
 from autobahn.websocket.protocol import parseWsUrl
 from autobahn.asyncio.websocket import WampWebSocketClientFactory
+from autobahn.wamp.runner import _ApplicationRunner, Connection
 
 try:
     import asyncio
@@ -43,9 +42,6 @@ except ImportError:
 
 import txaio
 txaio.use_asyncio()
-
-from autobahn.asyncio.websocket import WampWebSocketClientFactory
-from autobahn.wamp.runner import _ApplicationRunner, Connection
 
 
 __all__ = (
@@ -100,11 +96,11 @@ def _connect_stream(loop, cfg, wamp_transport_factory):
 
     elif ep['type'] == 'tcp':
         if ep.get('version', 4) == 4:
-            ssl = is_secure
-            ssl = ep.get('tls', ssl)
+            ssl = ep.get('tls', is_secure)
+            # ssl can be a bool or an ssl.SSLContext
             f = loop.create_connection(
-                    wamp_transport_factory, ep['host'], ep['port'],
-                    ssl=ssl,
+                wamp_transport_factory, ep['host'], ep['port'],
+                ssl=ssl,
             )
 
         else:
@@ -167,6 +163,7 @@ def connect_to(loop, transport_config, session):
 
     # XXX is there a better idiom for this in asyncio?
     f1 = asyncio.Future()
+
     def return_proto(result):
         try:
             transport, protocol = result.result()

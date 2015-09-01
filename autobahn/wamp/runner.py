@@ -26,9 +26,7 @@
 
 from __future__ import absolute_import, print_function
 
-from functools import wraps
 import itertools
-import json
 import six
 import txaio
 
@@ -36,6 +34,7 @@ from autobahn.wamp import transport
 from autobahn.wamp.exception import TransportLost
 from autobahn.wamp.protocol import _ListenerCollection
 from autobahn.websocket.protocol import parseWsUrl
+
 
 # XXX move to transport? protocol
 # XXX should at least move to same file as the "connect_to" things?
@@ -158,7 +157,7 @@ class Connection(object):
             try:
                 # might already be resolved, then we get exception
                 txaio.reject(self._done, fail)
-            except Exception as e:
+            except Exception:
                 return None
 
         def on_success(proto):
@@ -276,4 +275,3 @@ class _ApplicationRunner(object):
 
     def run(self, session_factory, **kw):
         raise RuntimeError("Subclass should override .run()")
-
