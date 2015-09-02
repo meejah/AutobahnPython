@@ -140,8 +140,7 @@ def connect_to(loop, transport_config, session):
     :param transport_config: dict containing valid client transport
     config (see :mod:`autobahn.wamp.transport`)
 
-    :param session_factory: callable that takes a ComponentConfig and
-    returns a new ISession instance (usually simply your
+    :param session: an instance providing ISession (i.e. an
     ApplicationSession subclass)
 
     :returns: Future that callbacks with a protocol instance after a
@@ -153,7 +152,7 @@ def connect_to(loop, transport_config, session):
         return session
 
     transport_factory = _create_wamp_factory(loop, transport_config, create)
-    f0 = _connect_stream(loop, transport_config, transport_factory)
+    f0 = txaio.as_future(_connect_stream, loop, transport_config, transport_factory)
 
     # mutate the return value of _connect_stream to be just the
     # protocol so that the API of connect_to is the "same" for Twisted
