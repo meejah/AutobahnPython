@@ -33,8 +33,14 @@ from autobahn.websocket.protocol import parseWsUrl
 _TX_TLS = False
 _SSL = False
 if txaio.using_twisted:
-    from twisted.internet.endpoints import clientFromString, serverFromString
-    from twisted.internet.interfaces import IStreamClientEndpoint, IStreamServerEndpoint
+    try:
+        from twisted.internet.endpoints import clientFromString, serverFromString
+        from twisted.internet.interfaces import IStreamClientEndpoint, IStreamServerEndpoint
+    except ImportError:
+        # we still support Twisted versions that lack endpoint
+        # support; this allows the unit-tests to run...Connection
+        # depends on endpoints, however, so ...
+        pass
 
     try:
         _TX_TLS = True
