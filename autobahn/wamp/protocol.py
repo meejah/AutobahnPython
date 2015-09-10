@@ -801,28 +801,24 @@ class ApplicationSession(BaseSession):
                                 self._transport.send(reply)
 
                         def error(err):
-                            # errmsg = 'Failure while invoking procedure {0} registered under "{1}: {2}".'.format(endpoint.fn, registration.procedure, err)
-                            errmsg = "{0}".format(err.value.args[0])
+                            errmsg = txaio.failure_message(err)
                             try:
-                                self.onUserError(err, errmsg)
+                                self.onUserError(err.value, errmsg)
                             except:
                                 pass
                             formatted_tb = None
                             if self.traceback_app:
                                 # if asked to marshal the traceback within the WAMP error message, extract it
-                                # noinspection PyCallingNonCallable
-                                tb = StringIO()
-                                err.printTraceback(file=tb)
-                                formatted_tb = tb.getvalue().splitlines()
+                                formatted_tb = txaio.failure_format_traceback(err).splitlines()
 
                             del self._invocations[msg.request]
 
-                            if hasattr(err, 'value'):
-                                exc = err.value
-                            else:
-                                exc = err
-
-                            reply = self._message_from_exception(message.Invocation.MESSAGE_TYPE, msg.request, exc, formatted_tb)
+                            reply = self._message_from_exception(
+                                message.Invocation.MESSAGE_TYPE,
+                                msg.request,
+                                err.value,
+                                formatted_tb,
+                            )
 
                             try:
                                 self._transport.send(reply)
