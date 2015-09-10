@@ -113,9 +113,8 @@ class WebSocketAdapterProtocol(twisted.internet.protocol.Protocol):
 
         elif isinstance(reason.value, ConnectionLost):
             self.factory.log.info(
-                "Connection to/from {peer} was lost in a non-clean fashion: {message}",
+                "Connection to/from {peer} was lost in a non-clean fashion.",
                 peer=self.peer,
-                message=txaio.failure_message(reason),
             )
 
         # at least: FileDescriptorOverrun, ConnectionFdescWentAway - but maybe others as well?
