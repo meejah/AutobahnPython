@@ -62,7 +62,8 @@ test_twisted_coverage:
 
 test_coverage:
 	-rm .coverage
-	tox -e py27twisted,py27asyncio,py34asyncio
+	tox -e py27-twtrunk,py27-asyncio,py34-asyncio
+	coverage combine
 	coverage html
 	coverage report --show-missing
 
