@@ -29,7 +29,6 @@ from __future__ import absolute_import
 import traceback
 import inspect
 import six
-from six import StringIO
 
 from autobahn.wamp.interfaces import ISession, \
     IPublication, \
