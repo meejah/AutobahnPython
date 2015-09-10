@@ -141,6 +141,7 @@ extras_require_dev = [
     "mock>=1.3.0",          # BSD license
     "pytest>=2.7.2",        # MIT license
     "unittest2>=1.1.0"      # BSD license
+    "tox>=2.1.1",
 ]
 
 # for testing by users with "python setup.py test" (not Tox, which we use)
