@@ -140,8 +140,8 @@ extras_require_dev = [
     "pyflakes>=0.9.2",      # MIT license
     "mock>=1.3.0",          # BSD license
     "pytest>=2.7.2",        # MIT license
-    "unittest2>=1.1.0"      # BSD license
-    "tox>=2.1.1",
+    "unittest2>=1.1.0",     # BSD license
+    "tox>=2.1.1",           # MIT license
 ]
 
 # for testing by users with "python setup.py test" (not Tox, which we use)

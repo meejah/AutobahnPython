@@ -44,8 +44,6 @@ from autobahn.twisted.util import peer2str
 
 import txaio
 
-import txaio
-
 from autobahn.websocket.compress import PerMessageDeflateOffer, \
     PerMessageDeflateOfferAccept, \
     PerMessageDeflateResponse, \
