@@ -118,7 +118,8 @@ extras_require_dev = [
     "pyflakes",
     "mock>=1.0.1",
     "pytest>=2.6.4",
-    "unittest2>=1.1.0"
+    "unittest2>=1.1.0",
+    "tox>=2.1.1",
 ]
 
 # for testing by users with "python setup.py test" (not Tox, which we use)
