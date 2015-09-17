@@ -58,7 +58,7 @@ rawsocket_unix_transport = {
 
 websocket_tcp_transport = {
     "type": "websocket",
-    "url": "ws://localhost:8080/ws",
+    "url": u"ws://localhost:8080/ws",
     "endpoint": {
         "type": "tcp",
         "host": "127.0.0.1",
@@ -66,7 +66,7 @@ websocket_tcp_transport = {
     }
 }
 if do_tls:
-    websocket_tcp_transport['url'] = "wss://localhost:9983/ws"
+    websocket_tcp_transport['url'] = u"wss://localhost:9983/ws"
     websocket_tcp_transport['endpoint']['port'] = 9983
     websocket_tcp_transport['endpoint']['tls'] = tls_options
     print("\nConfigured for TLS; server should be on {url}\n".format(**websocket_tcp_transport))

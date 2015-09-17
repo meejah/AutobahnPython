@@ -65,7 +65,7 @@ rawsocket_unix_transport = {
 
 websocket_tcp_transport = {
     "type": "websocket",
-    "url": "ws://localhost:8080/ws",
+    "url": u"ws://localhost:8080/ws",
     "endpoint": {
         "type": "tcp",
         "host": "127.0.0.1",
@@ -82,7 +82,7 @@ def main(reactor):
     # you can use "native" Twisted endpoint objects
     native_object_transport = {
         "type": "websocket",
-        "url": "ws://localhost:8080/ws",
+        "url": u"ws://localhost:8080/ws",
         "endpoint": UNIXClientEndpoint(reactor, '/tmp/cb-web')
     }
 
@@ -90,7 +90,7 @@ def main(reactor):
     # clientFromString
     endpoint_object_transport = {
         "type": "websocket",
-        "url": "ws://localhost:8080/ws",
+        "url": u"ws://localhost:8080/ws",
         "endpoint": "unix:path=/tmp/cb-web",
     }
 
