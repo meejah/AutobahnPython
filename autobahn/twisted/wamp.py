@@ -192,8 +192,6 @@ def _create_wamp_factory(reactor, cfg, session_factory):
 
     This creates the appropriate protocol-factory (that implements
     tx:`IProtocolFactory <twisted.internet.interfaces.IProtocolFactory>`)
-
-    XXX deal with debug/debug_wamp etcetc.
     """
 
     # type in ['websocket', 'rawsocket']
@@ -202,13 +200,10 @@ def _create_wamp_factory(reactor, cfg, session_factory):
     if kind == 'websocket':
         return WampWebSocketClientFactory(
             session_factory, url=cfg['url'],
-            debug=cfg.get('debug', False),
-            debug_wamp=cfg.get('debug_wamp', False),
         )
     elif kind == 'rawsocket':
         return WampRawSocketClientFactory(
             session_factory,
-            debug=cfg.get('debug', False),
         )
     else:
         raise RuntimeError("Unknown WAMP type '{}'".format(kind))
@@ -353,7 +348,7 @@ class ApplicationRunner(_ApplicationRunner):
 
                 def __call__(self, failure):
                     self.exception = failure.value
-                    log.failure(failure)
+                    self.log.critical(txaio.failure_message(failure))
             connect_error = ErrorCollector()
 
             def shutdown(_):

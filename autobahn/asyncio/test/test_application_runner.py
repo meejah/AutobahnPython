@@ -112,7 +112,7 @@ class TestApplicationRunner(unittest.TestCase):
         transports = [
             {
                 "type": "websocket",
-                "url": "wss://localhost:8080/ws",
+                "url": u"wss://localhost:8080/ws",
                 "endpoint": {
                     "type": "tcp",
                     "host": "127.0.0.1",
@@ -121,7 +121,7 @@ class TestApplicationRunner(unittest.TestCase):
                 },
             },
         ]
-        runner = ApplicationRunner(transports, 'realm', loop=loop,)
+        runner = ApplicationRunner(transports, u'realm', loop=loop,)
         runner.run(FakeSession)  # returns future
 
         self.assertIs(loop.create_connection.call_args[1]['ssl'], self.ssl_context)
@@ -136,7 +136,7 @@ class TestApplicationRunner(unittest.TestCase):
         loop.create_connection = Mock(return_value=txaio.create_future(result=(Mock(), Mock())))
         transports = [{
             "type": "websocket",
-            "url": 'ws://127.0.0.1:8080/ws',
+            "url": u'ws://127.0.0.1:8080/ws',
             "endpoint": {"type": "tcp", "host": '127.0.0.1', "port": 8080}
         }]
         session = FakeSession(None)
@@ -159,7 +159,7 @@ class TestApplicationRunner(unittest.TestCase):
         loop.create_connection = Mock(return_value=txaio.create_future(result=(Mock(), Mock())))
         transports = [{
             "type": "websocket",
-            "url": 'wss://127.0.0.1:8080/ws',
+            "url": u'wss://127.0.0.1:8080/ws',
             "endpoint": {"type": "tcp", "host": '127.0.0.1', "port": 8080}
         }]
         session = FakeSession(None)
@@ -178,7 +178,7 @@ class TestApplicationRunner(unittest.TestCase):
         loop.create_connection = Mock(return_value=txaio.create_future(result=(Mock(), Mock())))
         transports = [{
             "type": "websocket",
-            "url": 'ws://127.0.0.1:8080/ws',
+            "url": u'ws://127.0.0.1:8080/ws',
             "endpoint": {"type": "tcp", "host": '127.0.0.1', "port": 8080, "tls": True}
         }]
         session = FakeSession(None)
@@ -197,7 +197,7 @@ class TestApplicationRunner(unittest.TestCase):
         transports = [
             {
                 "type": "websocket",
-                "url": "ws://localhost:8080/ws",
+                "url": u"ws://localhost:8080/ws",
                 "endpoint": {
                     "type": "tcp",
                     "host": "127.0.0.1",
