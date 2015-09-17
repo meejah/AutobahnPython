@@ -607,7 +607,7 @@ class WampWebSocketClientFactory(websocket.WampWebSocketClientFactory, WebSocket
         serializers = kwargs.pop('serializers', None)
         debug_wamp = kwargs.pop('debug_wamp', False)
 
-        websocket.WampWebSocketClientFactory.__init__(self, factory, serializers)
+        websocket.WampWebSocketClientFactory.__init__(self, factory, serializers, debug_wamp=debug_wamp)
 
         kwargs['protocols'] = self._protocols
 
