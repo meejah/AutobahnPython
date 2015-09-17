@@ -34,7 +34,6 @@ from twisted.internet.error import ConnectionDone
 
 from autobahn.twisted.util import peer2str
 from autobahn.wamp.exception import ProtocolError, SerializationError, TransportLost
-from autobahn.logger import make_logger
 
 import txaio
 

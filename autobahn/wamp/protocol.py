@@ -37,7 +37,7 @@ from autobahn.wamp import types
 from autobahn.wamp import role
 from autobahn.wamp import exception
 from autobahn.wamp.exception import ApplicationError, ProtocolError, SessionNotReady, SerializationError
-from autobahn.wamp.interfaces import IApplicationSession  # noqa
+from autobahn.wamp.interfaces import IApplicationSession, ISession  # noqa
 from autobahn.wamp.types import SessionDetails
 from autobahn.util import IdGenerator
 

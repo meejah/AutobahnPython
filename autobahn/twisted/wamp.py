@@ -26,6 +26,8 @@
 
 from __future__ import absolute_import, print_function
 
+import six
+import sys
 import inspect
 
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -388,16 +390,6 @@ class ApplicationRunner(_ApplicationRunner):
         """
         self.session = self._session_factory(cfg)
         return self.session
-
-class Connection(object):
-
-    def __init__(self, transport=u'ws://127.0.0.1:8080/ws', realm=u'realm1', reactor=None):
-        pass
-
-    def connect(self, main):
-        d = txaio.create_future()
-        txaio.resolve(d, u"hello")
-        return d
 
 
 class _ApplicationSession(ApplicationSession):

@@ -52,7 +52,7 @@ class TestTransportParsing(unittest.TestCase):
             transport.check(
                 {
                     "type": "websocket",
-                    "url": "ws://127.0.0.1/ws",
+                    "url": u"ws://127.0.0.1/ws",
                 }
             )
         )
@@ -67,7 +67,7 @@ class TestTransportParsing(unittest.TestCase):
         self.assertRaises(Exception, transport.check,
                           {
                               "type": "websocket",
-                              "url": "ws://127.0.0.1/ws",
+                              "url": u"ws://127.0.0.1/ws",
                               "endpoint": {
                                   "tls": True,
                               }
@@ -78,7 +78,7 @@ class TestTransportParsing(unittest.TestCase):
             transport.check(
                 {
                     "type": "websocket",
-                    "url": "ws://127.0.0.1/ws",
+                    "url": u"ws://127.0.0.1/ws",
                     "endpoint": {
                         "host": "127.0.0.1",
                         "port": 1234,

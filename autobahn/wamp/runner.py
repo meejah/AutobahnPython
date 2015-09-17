@@ -92,8 +92,6 @@ class Connection(object):
         :type loop: IReactorCore (Twisted) or EventLoop (asyncio)
         """
 
-        assert(type(realm) == six.text_type)
-
         # public state (part of the API)
         self.protocol = None
         self.session = session
@@ -241,6 +239,8 @@ class _ApplicationRunner(object):
 
         :param loop: the event-loop/IReactor instance to use
         """
+
+        assert(type(realm) == six.text_type)
 
         self.realm = realm
         self.extra = extra or dict()

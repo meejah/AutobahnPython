@@ -30,7 +30,6 @@ import traceback
 
 from autobahn.websocket import protocol
 from autobahn.websocket.types import ConnectionDeny
-from autobahn.websocket import http
 from autobahn.wamp.interfaces import ITransport
 from autobahn.wamp.exception import ProtocolError, SerializationError, TransportLost
 
