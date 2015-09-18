@@ -501,7 +501,7 @@ class ApplicationSession(BaseSession):
                 # transport
                 details = types.CloseDetails(msg.reason, msg.message)
 
-                d = self.on.leave._notify(self)
+                d = self.on.leave._notify(details)
                 txaio.add_callbacks(d, lambda _: txaio.as_future(self.onLeave, details), None)
                 txaio.add_callbacks(d, lambda _: txaio.resolve(self.left, details), None)
 
@@ -523,7 +523,7 @@ class ApplicationSession(BaseSession):
                     self._transport.send(reply)
                     # fire callback and close the transport
                     details = types.CloseDetails(reply.reason, reply.message)
-                    d = self.on.leave._notify(self)
+                    d = self.on.leave._notify(details)
                     txaio.add_callbacks(d, lambda _: txaio.as_future(self.onLeave, details), None)
                     txaio.add_callbacks(d, lambda _: txaio.resolve(self.left, details), None)
 
@@ -551,7 +551,7 @@ class ApplicationSession(BaseSession):
 
                 # fire callback and close the transport
                 details = types.CloseDetails(msg.reason, msg.message)
-                d = self.on.leave._notify(self)
+                d = self.on.leave._notify(details)
                 txaio.add_callbacks(d, lambda _: txaio.as_future(self.onLeave, details), None)
                 txaio.add_callbacks(d, lambda _: txaio.resolve(self.left, details), None)
 
@@ -886,7 +886,7 @@ class ApplicationSession(BaseSession):
             # fire callback and close the transport
             details = types.CloseDetails(reason=types.CloseDetails.REASON_TRANSPORT_LOST,
                                          message="WAMP transport was lost without closing the session before")
-            d = self.on.leave._notify(self)
+            d = self.on.leave._notify(details)
             txaio.add_callbacks(d, lambda _: txaio.as_future(self.onLeave, details), None)
             txaio.add_callbacks(d, lambda _: txaio.resolve(self.left, details), None)
 
