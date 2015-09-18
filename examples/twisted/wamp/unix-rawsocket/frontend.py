@@ -30,12 +30,12 @@
 
 from __future__ import print_function
 
-from autobahn.twisted.wamp import ApplicationRunner
+from autobahn.twisted.wamp import Connection, run
 
 # the example ApplicationSession subclass
 from clientsession import ClientSession
 
-do_tls = True
+do_tls = False
 if do_tls:
     from twisted.internet._sslverify import OpenSSLCertificateAuthorities
     from twisted.internet.ssl import CertificateOptions
@@ -72,5 +72,10 @@ if do_tls:
     print("\nConfigured for TLS; server should be on {url}\n".format(**websocket_tcp_transport))
 
 if __name__ == '__main__':
-    runner = ApplicationRunner([websocket_tcp_transport], u"realm1")
-    runner.run(ClientSession)
+    connection = Connection(
+        transports=[websocket_tcp_transport],
+        realm=u"realm1",
+        session_factory=ClientSession,
+    )
+    run(connection, log_level='debug')
+

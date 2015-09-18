@@ -30,7 +30,7 @@ import six
 import sys
 import inspect
 
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, DeferredList
 from twisted.internet.error import ReactorAlreadyRunning
 from twisted.internet.interfaces import IStreamClientEndpoint, IProtocolFactory, IReactorCore
 from twisted.internet.endpoints import clientFromString, UNIXClientEndpoint
@@ -212,7 +212,7 @@ def _create_wamp_factory(reactor, cfg, session_factory):
 # XXX THINK move to transport.py?
 # XXX the shutdown hooks being different between asyncio/twisted makes this hard to be generic :(
 @inlineCallbacks
-def connect_to(reactor, transport_config, session):
+def connect_to(transport_config, session, loop=None):
     """:param reactor: the reactor to use (or None for default)
 
     :param transport_config: dict containing valid client transport
@@ -231,6 +231,10 @@ def connect_to(reactor, transport_config, session):
 
     def create():
         return session
+
+    reactor = loop
+    if loop is None:
+        from twisted.internet import reactor
 
     if IProtocolFactory.providedBy(transport_config):
         transport_factory = transport_config
@@ -254,6 +258,56 @@ def connect_to(reactor, transport_config, session):
     reactor.addSystemEventTrigger('before', 'shutdown', cleanup)
 
     returnValue(proto)
+
+
+# this replaces ApplicationRunner, and is the preferred API. Or, call
+# Connection.open() yourself, use txaio.start_logging() and run your
+# own reactor.
+def run(connections, log_level='info', loop=None):
+    # be nice if user just passes one connection
+    if isinstance(connections, Connection):
+        connections = [connections]
+
+    # decide on event-loop (FIXME use choosereactor)
+    print("log-level is", log_level)
+    log = txaio.make_logger()
+    txaio.start_logging(level=log_level)
+    log.info("info")
+    log.debug("debug")
+    log.error("error")
+    log.critical("critical")
+
+    if loop is None:
+        from twisted.internet import reactor as loop
+    txaio.use_twisted()
+    txaio.config.loop = loop
+
+    # open all the connections (in parallel)
+
+    def error(fail):
+        log.error("{msg}", msg=txaio.failure_message(fail))
+        log.debug("{traceback}", traceback=txaio.failure_format_traceback(fail))
+
+    def success(_):
+        log.info('All connections have completed.')
+        loop.stop()
+
+    def startup():
+        opens = []
+        for conn in connections:
+            if conn._loop is None:
+                conn._loop = loop
+            d = conn.open()
+            d.addErrback(error)
+            opens.append(d)
+        done = DeferredList(opens)
+
+        done.addCallback(success)
+        # DeferredList never errbacks.
+        return done
+
+    loop.callWhenRunning(startup)
+    loop.run()
 
 
 # XXX probably want IConnection to declare API (e.g. so asyncio one

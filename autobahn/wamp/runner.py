@@ -133,9 +133,10 @@ class Connection(object):
         else:
             from autobahn.asyncio.wamp import connect_to, ApplicationSession
         self._connect_to = connect_to
+
+        # instantiate our session
         if self._session_factory is None:
             self._session_factory = ApplicationSession
-
         self._config = ComponentConfig(realm, extra)
         self.session = self._session_factory(self._config)
 
@@ -173,7 +174,8 @@ class Connection(object):
         self.session.on('leave', self._on_leave)
 
         self._connecting = txaio.as_future(
-            self._connect_to, self._loop, transport_config, self.session,
+            self._connect_to, transport_config, self.session,
+            loop=self._loop,
         )
 
         def on_error(fail):
@@ -188,16 +190,13 @@ class Connection(object):
                 return None
 
         def on_success(proto):
-            #print("connected", proto)
             self.connect_count += 1
             self.protocol = proto
-            #print("SESS", self.session.joined)
             if self._main is not None:
-                if self._main:
-                    self._main_done = txaio.as_future(self._main, self.session)
-                else:
-                    self._main_done = txaio.create_future_success(None)
-                txaio.add_callbacks(self._main_done, self._main_completed, self._main_error)
+                self._main_done = txaio.as_future(self._main, self.session)
+            else:
+                self._main_done = txaio.create_future_success(None)
+            txaio.add_callbacks(self._main_done, self._main_completed, self._main_error)
 
         txaio.add_callbacks(self._connecting, on_success, on_error)
         return self._done
@@ -278,7 +277,7 @@ class _ApplicationRunner(object):
     - autobahn.twisted.asyncio.ApplicationRunner
     """
 
-    def __init__(self, url_or_transports, loop=None):
+    def __init__(self, url_or_transports, realm=u'default', extra=None, loop=None):
         """
         :param url_or_transports:
             an iterable of dicts, each one configuring WAMP transport
@@ -300,11 +299,11 @@ class _ApplicationRunner(object):
         :param loop: the event-loop/IReactor instance to use
         """
 
-        assert(type(realm) == six.text_type)
+        if type(realm) != six.text_type:
+            raise Exception("'realm' must be unicode")
 
         self.realm = realm
-        self.extra = extra or dict()
-        self.on = _ListenerCollection(['connection'])
+        self.extra = extra
 
         # the reactor or asyncio event-loop
         self._loop = loop
