@@ -440,8 +440,11 @@ class ApplicationSession(BaseSession):
             self.log.error(fail.value.error_message())
         else:
             self.log.error(
-                '{msg}: {traceback}',
+                '{msg}',
                 msg=msg,
+            )
+            self.log.debug(
+                '{traceback}',
                 traceback=txaio.failure_format_traceback(fail),
             )
 
@@ -869,7 +872,6 @@ class ApplicationSession(BaseSession):
         Implements :func:`autobahn.wamp.interfaces.ITransportHandler.onClose`
         """
         self._transport = None
-
         if self._session_id:
             # fire callback and close the transport
             details = types.CloseDetails(reason=types.CloseDetails.REASON_TRANSPORT_LOST,
@@ -882,20 +884,25 @@ class ApplicationSession(BaseSession):
             txaio.add_callbacks(d, None, _error)
 
             self._session_id = None
+        else:
+            d = txaio.create_future_success(None)
 
         # XXX do we want to chain these to "d" from if block above?
-        d0 = txaio.as_future(self.onDisconnect)
-
         def do_disconnect(rtn):
+            d0 = txaio.as_future(self.onDisconnect)
+            return rtn
+        txaio.add_callbacks(d, do_disconnect, do_disconnect)
+
+        def notify_disconnect(rtn):
             detail = 'closed' if wasClean else 'lost'
             d1 = self.on.disconnect._notify(detail)
             txaio.add_callbacks(d1, lambda _: rtn, None)
             return d1
-        txaio.add_callbacks(d0, do_disconnect, None)
+        txaio.add_callbacks(d, notify_disconnect, None)
 
         def _error(e):
             return self._swallow_error(e, "While firing onDisconnect")
-        txaio.add_callbacks(d0, None, _error)
+        txaio.add_callbacks(d, None, _error)
 
     def onChallenge(self, challenge):
         """
@@ -1118,6 +1125,10 @@ class ApplicationSession(BaseSession):
         """
         Implements :func:`autobahn.wamp.interfaces.ICallee.register`
         """
+        if not callable(endpoint):
+            raise RuntimeError("'endpoint' argument must be a callable")
+        if procedure is None and not hasattr(endpoint, '__class__'):
+            raise RuntimeError("Must specify a 'procedure' if endpoint isn't an instance")
         assert((callable(endpoint) and procedure is not None) or hasattr(endpoint, '__class__'))
         if procedure and six.PY2 and type(procedure) == str:
             procedure = six.u(procedure)
