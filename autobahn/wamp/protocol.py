@@ -503,7 +503,7 @@ class ApplicationSession(BaseSession):
 
                 d = self.on.leave._notify(details)
                 txaio.add_callbacks(d, lambda _: txaio.as_future(self.onLeave, details), None)
-                txaio.add_callbacks(d, lambda _: txaio.resolve(self.left, details), None)
+                txaio.add_callbacks(d, lambda _: self._do_left(details), None)
 
                 def _error(e):
                     return self._swallow_error(e, "While firing onLeave")
@@ -525,7 +525,7 @@ class ApplicationSession(BaseSession):
                     details = types.CloseDetails(reply.reason, reply.message)
                     d = self.on.leave._notify(details)
                     txaio.add_callbacks(d, lambda _: txaio.as_future(self.onLeave, details), None)
-                    txaio.add_callbacks(d, lambda _: txaio.resolve(self.left, details), None)
+                    txaio.add_callbacks(d, lambda _: self._do_left(details), None)
 
                     def _error(e):
                         return self._swallow_error(e, "While firing onLeave")
@@ -553,7 +553,7 @@ class ApplicationSession(BaseSession):
                 details = types.CloseDetails(msg.reason, msg.message)
                 d = self.on.leave._notify(details)
                 txaio.add_callbacks(d, lambda _: txaio.as_future(self.onLeave, details), None)
-                txaio.add_callbacks(d, lambda _: txaio.resolve(self.left, details), None)
+                txaio.add_callbacks(d, lambda _: self._do_left(details), None)
 
                 def _error(e):
                     errmsg = 'While firing onLeave for reason "{0}" and message "{1}"'.format(msg.reason, msg.message)
@@ -888,7 +888,7 @@ class ApplicationSession(BaseSession):
                                          message="WAMP transport was lost without closing the session before")
             d = self.on.leave._notify(details)
             txaio.add_callbacks(d, lambda _: txaio.as_future(self.onLeave, details), None)
-            txaio.add_callbacks(d, lambda _: txaio.resolve(self.left, details), None)
+            txaio.add_callbacks(d, lambda _: self._do_left(details), None)
 
             def _error(e):
                 return self._swallow_error(e, "While firing onLeave")
@@ -960,6 +960,16 @@ class ApplicationSession(BaseSession):
         """
         Implements :func:`autobahn.wamp.interfaces.ISession.onDisconnect`
         """
+
+    def _do_left(self, details):
+        """
+        Internal helper
+        """
+        txaio.resolve(self.left, details)
+        if not txaio.is_called(self.joined):
+            self.log.debug("Left without joining")
+        self.joined = txaio.create_future()
+        self.left = txaio.create_future()
 
     def publish(self, topic, *args, **kwargs):
         """
