@@ -170,6 +170,7 @@ class Connection(object):
         self._main_done = None
         # this will resolve the _done future (good or bad)
         self.session.on('disconnect', self._on_disconnect)
+        self.session.on('leave', self._on_leave)
 
         self._connecting = txaio.as_future(
             self._connect_to, self._loop, transport_config, self.session,
@@ -236,6 +237,14 @@ class Connection(object):
         print(txaio.failure_format_traceback(fail))
         if not txaio.is_called(self._main_done):
             txaio.reject(self._main_done, fail)
+
+    def _on_leave(self, details):
+        if details.reason.startswith('wamp.error.'):
+            fail = txaio.create_failure(
+                Exception('{0}: {1}'.format(details.reason, details.message))
+            )
+            txaio.reject(self._done, fail)
+
 
     def _on_disconnect(self, reason):
         #print("Disconnect; waiting for main to complete:", reason)
