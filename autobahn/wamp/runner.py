@@ -31,6 +31,7 @@ import six
 import txaio
 
 from autobahn.wamp import transport
+from autobahn.wamp.types import ComponentConfig
 from autobahn.wamp.exception import TransportLost
 from autobahn.wamp.protocol import _ListenerCollection
 from autobahn.websocket.protocol import parseWsUrl
@@ -79,14 +80,33 @@ class Connection(object):
     # XXX I decided to pass a actualy "session" instance (instead of
     # session_factory) so that adding listeners is easier, and because
     # it only ever got called once anyway.
-    def __init__(self, session, transports, loop=None):
+    def __init__(self, transports,
+                 main=None,
+                 realm=u"default",
+                 extra=None,
+                 session_factory=None,
+                 loop=None):
         """
-        :param session: an ApplicationSession (or subclass) instance.
-
         :param transports: a list of dicts configuring available
             transports. See :meth:`autobahn.wamp.transport.check` for
             valid keys
         :type transports: list (of dicts)
+
+        :param main: a (possibly async) method that is called with a
+        session instance whenever a session is connected (but not
+        joined!).
+        :type main: callable taking single arg (ISession instance)
+
+        :param realm: The WAMP realm to join the application session to.
+        :type realm: unicode
+
+        :param extra: An object available as "self.config.extra" in
+        the session object (default: empty dict).
+        :type extra: anything
+
+        :param session_factory: takes one argument (ComponentConfig) and
+        creates an ISession provider.
+        :type session_factory: ApplicationSession subclass or other ISession
 
         :param loop: reactor/event-loop instance (or None for a default one)
         :type loop: IReactorCore (Twisted) or EventLoop (asyncio)
@@ -94,11 +114,13 @@ class Connection(object):
 
         # public state (part of the API)
         self.protocol = None
-        self.session = session
         self.connect_count = 0
         self.attempt_count = 0
+        self.session = None  # set below
 
         # private state / configuration
+        self._session_factory = session_factory
+        self._main = main
         self._connecting = None  # a Deferred/Future while connecting
         self._done = None  # a Deferred/Future that fires when we're done
 
@@ -107,10 +129,15 @@ class Connection(object):
 
         # figure out which connect_to implementation we need
         if txaio.using_twisted:
-            from autobahn.twisted.wamp import connect_to
+            from autobahn.twisted.wamp import connect_to, ApplicationSession
         else:
-            from autobahn.asyncio.wamp import connect_to
+            from autobahn.asyncio.wamp import connect_to, ApplicationSession
         self._connect_to = connect_to
+        if self._session_factory is None:
+            self._session_factory = ApplicationSession
+
+        self._config = ComponentConfig(realm, extra)
+        self.session = self._session_factory(self._config)
 
         # the reactor or asyncio event-loop
         self._loop = loop
@@ -140,6 +167,7 @@ class Connection(object):
 
         self.attempt_count += 1
         self._done = txaio.create_future()
+        self._main_done = None
         # this will resolve the _done future (good or bad)
         self.session.on('disconnect', self._on_disconnect)
 
@@ -159,8 +187,16 @@ class Connection(object):
                 return None
 
         def on_success(proto):
+            #print("connected", proto)
             self.connect_count += 1
             self.protocol = proto
+            #print("SESS", self.session.joined)
+            if self._main is not None:
+                if self._main:
+                    self._main_done = txaio.as_future(self._main, self.session)
+                else:
+                    self._main_done = txaio.create_future_success(None)
+                txaio.add_callbacks(self._main_done, self._main_completed, self._main_error)
 
         txaio.add_callbacks(self._connecting, on_success, on_error)
         return self._done
@@ -190,13 +226,31 @@ class Connection(object):
                 txaio.resolve(f, None)
                 return f
 
+    def _main_completed(self, arg):
+        #print("resolving _main_done", arg)
+        if not txaio.is_called(self._main_done):
+            txaio.resolve(self._main_done, arg)
+
+    def _main_error(self, fail):
+        #print("REJECT", fail.value)
+        print(txaio.failure_format_traceback(fail))
+        if not txaio.is_called(self._main_done):
+            txaio.reject(self._main_done, fail)
+
     def _on_disconnect(self, reason):
-        if reason == 'closed':
-            txaio.resolve(self._done, None)
-        else:
-            txaio.reject(self._done, Exception('Transport disconnected uncleanly'))
-        self._connecting = None
-        self._done = None
+        #print("Disconnect; waiting for main to complete:", reason)
+        def _really_done(arg):
+            #print("main completed:", arg, reason)
+            if reason == 'closed':
+                txaio.resolve(self._done, None)
+            else:
+                txaio.reject(self._done, Exception('Transport disconnected uncleanly: {}'.format(reason)))
+            self._connecting = None
+            self._done = None
+        def _error(fail):
+            print(txaio.failure_format_traceback(fail))
+        txaio.add_callbacks(self._main_done, _really_done, _error)
+        return self._main_done
 
     def __str__(self):
         return "<Connection session={} protocol={} attempts={} connected={}>".format(
@@ -215,11 +269,8 @@ class _ApplicationRunner(object):
     - autobahn.twisted.asyncio.ApplicationRunner
     """
 
-    def __init__(self, url_or_transports, realm, extra=None, loop=None):
+    def __init__(self, url_or_transports, loop=None):
         """
-        :param realm: The WAMP realm to join the application session to.
-        :type realm: unicode
-
         :param url_or_transports:
             an iterable of dicts, each one configuring WAMP transport
             options, possibly including an Endpoint to connect
