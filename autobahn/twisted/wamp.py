@@ -379,7 +379,6 @@ class ApplicationRunner(_ApplicationRunner):
             extra=self.extra,
             loop=loop,
         )
-        ## XXXX self.on.connection._notify(connection)
 
         # if the user didn't ask us to start the reactor, then they
         # get to deal with any connect errors themselves.

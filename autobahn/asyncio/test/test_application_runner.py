@@ -139,8 +139,7 @@ class TestApplicationRunner(unittest.TestCase):
             "url": u'ws://127.0.0.1:8080/ws',
             "endpoint": {"type": "tcp", "host": '127.0.0.1', "port": 8080}
         }]
-        session = FakeSession(None)
-        connection = Connection(session, transports, loop=loop)
+        connection = Connection(transports, session_factory=FakeSession, loop=loop)
         connection.open()  # returns future
 
         # annoying, but you have to "do a trip" through the
@@ -162,8 +161,7 @@ class TestApplicationRunner(unittest.TestCase):
             "url": u'wss://127.0.0.1:8080/ws',
             "endpoint": {"type": "tcp", "host": '127.0.0.1', "port": 8080}
         }]
-        session = FakeSession(None)
-        connection = Connection(session, transports, loop=loop)
+        connection = Connection(transports, session_factory=FakeSession, loop=loop)
         connection.open()
 
         self.assertTrue(loop.create_connection.call_args[1]['ssl'])
@@ -181,8 +179,7 @@ class TestApplicationRunner(unittest.TestCase):
             "url": u'ws://127.0.0.1:8080/ws',
             "endpoint": {"type": "tcp", "host": '127.0.0.1', "port": 8080, "tls": True}
         }]
-        session = FakeSession(None)
-        connection = Connection(session, transports, loop=loop)
+        connection = Connection(transports, session_factory=FakeSession, loop=loop)
 
         # should get an error when we try to open a "tls=True" connection with a "ws://" URL
         self.assertRaises(RuntimeError, connection.open)

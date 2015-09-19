@@ -35,7 +35,7 @@ from twisted.internet.interfaces import IReactorTime, IReactorCore
 from twisted.trial import unittest
 from zope.interface import implementer
 
-from mock import patch, Mock
+from mock import Mock
 
 from autobahn.twisted.wamp import ApplicationRunner
 from autobahn.wamp.runner import Connection

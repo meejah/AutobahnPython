@@ -28,7 +28,6 @@ from __future__ import absolute_import, print_function
 import signal
 
 from autobahn.wamp import protocol
-from autobahn.wamp.types import ComponentConfig
 from autobahn.websocket.protocol import parseWsUrl
 from autobahn.asyncio.websocket import WampWebSocketClientFactory
 from autobahn.wamp.runner import _ApplicationRunner, Connection
@@ -135,7 +134,7 @@ def _create_wamp_factory(reactor, cfg, session_factory):
 # shutdown works.
 
 
-def connect_to(loop, transport_config, session):
+def connect_to(transport_config, session, loop=None):
     """
     :param transport_config: dict containing valid client transport
     config (see :mod:`autobahn.wamp.transport`)
@@ -151,6 +150,8 @@ def connect_to(loop, transport_config, session):
     def create():
         return session
 
+    if loop is None:
+        loop = asyncio.get_event_loop()
     transport_factory = _create_wamp_factory(loop, transport_config, create)
     f0 = txaio.as_future(_connect_stream, loop, transport_config, transport_factory)
 
@@ -208,11 +209,12 @@ class ApplicationRunner(_ApplicationRunner):
             # signals are not available on Windows
             pass
 
-        session = session_factory(ComponentConfig(realm=self.realm, extra=self.extra))
         self.connection = Connection(
-            session,
             self._transports,
-            loop,
+            session_factory=session_factory,
+            realm=self.realm,
+            extra=self.extra,
+            loop=loop,
         )
 
         # now enter the asyncio event loop
