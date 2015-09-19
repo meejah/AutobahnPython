@@ -443,10 +443,11 @@ class ApplicationSession(BaseSession):
         else:
             self.log.error(
                 '{msg}',
-                msg=msg,
+                msg=txaio.failure_format_traceback(fail),
             )
             self.log.debug(
-                '{traceback}',
+                '{msg}: {traceback}',
+                msg=msg,
                 traceback=txaio.failure_format_traceback(fail),
             )
 
