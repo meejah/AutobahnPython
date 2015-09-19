@@ -106,9 +106,7 @@ if os.environ.get('USE_TWISTED', False):
             # to get created in the first place?
             from twisted.internet import reactor
             for call in reactor.getDelayedCalls():
-                if hasattr(call.func, 'im_class'):
-                    if issubclass(WebSocketServerProtocol, call.func.im_class):
-                        call.cancel()
+                call.cancel()
 
         def test_missing_reason_raw(self):
             # we want to hit the "STATE_OPEN" case, so pretend we're there
