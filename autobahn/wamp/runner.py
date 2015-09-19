@@ -33,7 +33,6 @@ import txaio
 from autobahn.wamp import transport
 from autobahn.wamp.types import ComponentConfig
 from autobahn.wamp.exception import TransportLost
-from autobahn.wamp.protocol import _ListenerCollection
 from autobahn.websocket.protocol import parseWsUrl
 
 
@@ -227,34 +226,30 @@ class Connection(object):
                 return f
 
     def _main_completed(self, arg):
-        #print("resolving _main_done", arg)
         if not txaio.is_called(self._main_done):
             txaio.resolve(self._main_done, arg)
 
     def _main_error(self, fail):
-        #print("REJECT", fail.value)
         print(txaio.failure_format_traceback(fail))
         if not txaio.is_called(self._main_done):
             txaio.reject(self._main_done, fail)
 
-    def _on_leave(self, details):
+    def _on_leave(self, session, details):
         if details.reason.startswith('wamp.error.'):
             fail = txaio.create_failure(
                 Exception('{0}: {1}'.format(details.reason, details.message))
             )
             txaio.reject(self._done, fail)
 
-
-    def _on_disconnect(self, reason):
-        #print("Disconnect; waiting for main to complete:", reason)
+    def _on_disconnect(self, session, reason):
         def _really_done(arg):
-            #print("main completed:", arg, reason)
             if reason == 'closed':
                 txaio.resolve(self._done, None)
             else:
                 txaio.reject(self._done, Exception('Transport disconnected uncleanly: {}'.format(reason)))
             self._connecting = None
             self._done = None
+
         def _error(fail):
             print(txaio.failure_format_traceback(fail))
         txaio.add_callbacks(self._main_done, _really_done, _error)

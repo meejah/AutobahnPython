@@ -232,6 +232,8 @@ class _Listener(object):
     callbacks and invoke them wherever we need listeners...
     """
 
+    log = txaio.make_logger()
+
     def __init__(self):
         self._listeners = set()
 
@@ -259,8 +261,8 @@ class _Listener(object):
         calls = []
 
         def failed(fail):
-            # XXX use logger
-            fail.printTraceback()
+            self.log.error("Notifying listener failed: {msg}", msg=txaio.failure_message(fail))
+            self.log.debug("{traceback}", traceback=txaio.failure_format_traceback(fail))
 
         for cb in self._listeners:
             f = txaio.as_future(cb, *args, **kw)
@@ -484,7 +486,7 @@ class ApplicationSession(BaseSession):
 
                 details = SessionDetails(self._realm, self._session_id, msg.authid, msg.authrole, msg.authmethod)
 
-                d = self.on.join._notify(self)
+                d = self.on.join._notify(self, details)
                 txaio.add_callbacks(d, lambda _: txaio.as_future(self.onJoin, details), None)
                 txaio.add_callbacks(d, lambda _: self.on.ready._notify(self), None)
                 txaio.add_callbacks(d, lambda _: self.joined.callback(details), None)
@@ -501,7 +503,7 @@ class ApplicationSession(BaseSession):
                 # transport
                 details = types.CloseDetails(msg.reason, msg.message)
 
-                d = self.on.leave._notify(details)
+                d = self.on.leave._notify(self, details)
                 txaio.add_callbacks(d, lambda _: txaio.as_future(self.onLeave, details), None)
                 txaio.add_callbacks(d, lambda _: self._do_left(details), None)
 
@@ -523,7 +525,7 @@ class ApplicationSession(BaseSession):
                     self._transport.send(reply)
                     # fire callback and close the transport
                     details = types.CloseDetails(reply.reason, reply.message)
-                    d = self.on.leave._notify(details)
+                    d = self.on.leave._notify(self, details)
                     txaio.add_callbacks(d, lambda _: txaio.as_future(self.onLeave, details), None)
                     txaio.add_callbacks(d, lambda _: self._do_left(details), None)
 
@@ -551,7 +553,7 @@ class ApplicationSession(BaseSession):
 
                 # fire callback and close the transport
                 details = types.CloseDetails(msg.reason, msg.message)
-                d = self.on.leave._notify(details)
+                d = self.on.leave._notify(self, details)
                 txaio.add_callbacks(d, lambda _: txaio.as_future(self.onLeave, details), None)
                 txaio.add_callbacks(d, lambda _: self._do_left(details), None)
 
@@ -886,7 +888,7 @@ class ApplicationSession(BaseSession):
             # fire callback and close the transport
             details = types.CloseDetails(reason=types.CloseDetails.REASON_TRANSPORT_LOST,
                                          message="WAMP transport was lost without closing the session before")
-            d = self.on.leave._notify(details)
+            d = self.on.leave._notify(self, details)
             txaio.add_callbacks(d, lambda _: txaio.as_future(self.onLeave, details), None)
             txaio.add_callbacks(d, lambda _: self._do_left(details), None)
 
@@ -895,25 +897,24 @@ class ApplicationSession(BaseSession):
             txaio.add_callbacks(d, None, _error)
 
             self._session_id = None
-        else:
-            d = txaio.create_future_success(None)
 
-        # XXX do we want to chain these to "d" from if block above?
-        def do_disconnect(rtn):
-            d0 = txaio.as_future(self.onDisconnect)
-            return rtn
-        txaio.add_callbacks(d, do_disconnect, do_disconnect)
+# XXX hmm, why do "all" the tests fail if I try chaining to d?
+#        else:
+#            d = txaio.create_future_success(None)
+
+        # XXX do we want to chain these to "d" from if block above? (yes) (hmm: maybe not
+        d2 = txaio.as_future(self.onDisconnect)
 
         def notify_disconnect(rtn):
             detail = 'closed' if wasClean else 'lost'
-            d1 = self.on.disconnect._notify(detail)
+            d1 = self.on.disconnect._notify(self, detail)
             txaio.add_callbacks(d1, lambda _: rtn, None)
             return d1
-        txaio.add_callbacks(d, notify_disconnect, None)
+        txaio.add_callbacks(d2, notify_disconnect, None)
 
         def _error(e):
             return self._swallow_error(e, "While firing onDisconnect")
-        txaio.add_callbacks(d, None, _error)
+        txaio.add_callbacks(d2, None, _error)
 
     def onChallenge(self, challenge):
         """

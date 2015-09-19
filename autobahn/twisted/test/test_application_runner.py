@@ -117,8 +117,10 @@ def raise_error(*args, **kw):
 
 
 class TestApplicationRunner(unittest.TestCase):
-    @patch('twisted.internet.reactor')
-    def test_runner_default(self, fakereactor):
+    def test_runner_default(self):
+        fakereactor = FakeReactor(None)
+        fakereactor.run = Mock()
+        fakereactor.stop = Mock()
         fakereactor.connectTCP = Mock(side_effect=raise_error)
         runner = ApplicationRunner(u'ws://fake:1234/ws', u'dummy realm', loop=fakereactor)
 
@@ -132,11 +134,13 @@ class TestApplicationRunner(unittest.TestCase):
             fakereactor.stop.call_count
         )
 
-    @patch('twisted.internet.reactor')
     @inlineCallbacks
-    def test_runner_no_run(self, fakereactor):
+    def test_runner_no_run(self):
+        fakereactor = FakeReactor(None)
+        fakereactor.run = Mock()
+        fakereactor.stop = Mock()
         fakereactor.connectTCP = Mock(side_effect=raise_error)
-        runner = ApplicationRunner(u'ws://fake:1234/ws', u'dummy realm')
+        runner = ApplicationRunner(u'ws://fake:1234/ws', u'dummy realm', loop=fakereactor)
 
         try:
             yield runner.run(raise_error, start_reactor=False)
@@ -151,11 +155,13 @@ class TestApplicationRunner(unittest.TestCase):
         self.assertEqual(fakereactor.run.call_count, 0)
         self.assertEqual(fakereactor.stop.call_count, 0)
 
-    @patch('twisted.internet.reactor')
-    def test_runner_no_run_happypath(self, fakereactor):
+    def test_runner_no_run_happypath(self):
+        fakereactor = FakeReactor(None)
         proto = Mock()
+        fakereactor.run = Mock()
+        fakereactor.stop = Mock()
         fakereactor.connectTCP = Mock(return_value=succeed(proto))
-        runner = ApplicationRunner(u'ws://fake:1234/ws', u'dummy realm')
+        runner = ApplicationRunner(u'ws://fake:1234/ws', u'dummy realm', loop=fakereactor)
 
         d = runner.run(Mock(), start_reactor=False)
 
@@ -196,7 +202,12 @@ class TestConnection(unittest.TestCase):
                 "port": 9876,
             }
         }]
-        self.connection = Connection(self.session, self.transports, loop=self.loop)
+
+        def create_session(config):
+            self.config = config
+            self.session = FakeSession(config)
+            return self.session
+        self.connection = Connection(transports=self.transports, session_factory=create_session, loop=self.loop)
 
     def test_failed_open(self):
         """If the connect fails, the future/deferred from .open() should fail"""
@@ -236,7 +247,7 @@ class TestConnection(unittest.TestCase):
         # pretend the connect was successful
         txaio.resolve(self.connection._connecting, None)
         # ...and that we got the on_disconnect event
-        self.connection._on_disconnect('closed')
+        self.connection._on_disconnect(self.session, 'closed')
 
         self.assertTrue(d.called)
 
@@ -247,7 +258,7 @@ class TestConnection(unittest.TestCase):
         # pretend the connect was successful
         txaio.resolve(self.connection._connecting, None)
         # ...and that we got the on_disconnect event
-        self.connection._on_disconnect('lost')
+        self.connection._on_disconnect(self.session, 'lost')
 
         self.assertTrue(d.called)
         # ignore this error; we expected it

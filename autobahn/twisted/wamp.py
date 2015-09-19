@@ -269,13 +269,8 @@ def run(connections, log_level='info', loop=None):
         connections = [connections]
 
     # decide on event-loop (FIXME use choosereactor)
-    print("log-level is", log_level)
     log = txaio.make_logger()
     txaio.start_logging(level=log_level)
-    log.info("info")
-    log.debug("debug")
-    log.error("error")
-    log.critical("critical")
 
     if loop is None:
         from twisted.internet import reactor as loop
@@ -316,7 +311,8 @@ def run(connections, log_level='info', loop=None):
 
 
 class ApplicationRunner(_ApplicationRunner):
-    """Provides a high-level API that is (mostly) consistent across
+    """
+    Provides a high-level API that is (mostly) consistent across
     asyncio and Twisted code. This starts the event-loop/reactor,
     starts logging and provides a place to put all your configuration
     information.
@@ -337,15 +333,6 @@ class ApplicationRunner(_ApplicationRunner):
     ``ApplicationSession`` (or subclass) instance.
     """
 
-    # XXX maybe we want to change this since right now there's not
-    # really a good way to start multiple sessions with
-    # ApplicationRunner and then what's the point, really? (i.e. just
-    # use Connection itself). Could do:
-    #  - have a "add_session" that takes session_factory, creates a Connection instance, adds to internal list
-    #  - run() takes no args and runs all Connections in our list (i.e. get rid of start_reactor=False)
-    #  - add_session could return the Connection instance, so if caller wants it they can have it
-    #  - (or add_session just takes a session instance/nothing [default: ApplicationSession]?)
-    #  - additionally, this would get rid of the need for the 'connection' or similar event...
     def run(self, session_factory, start_reactor=True):
         """
         Run an application component.
@@ -382,13 +369,14 @@ class ApplicationRunner(_ApplicationRunner):
         # Connection(..).open() and then you can start logging however you want...?
         txaio.start_logging(out=sys.stdout, level='info')
 
-        session = session_factory(ComponentConfig(realm=self.realm, extra=self.extra))
         connection = Connection(
-            session,
             self._transports,
-            loop,
+            session_factory,
+            realm=self.realm,
+            extra=self.extra,
+            loop=loop,
         )
-        self.on.connection._notify(connection)
+        ## XXXX self.on.connection._notify(connection)
 
         # if the user didn't ask us to start the reactor, then they
         # get to deal with any connect errors themselves.
