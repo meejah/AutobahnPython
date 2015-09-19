@@ -33,6 +33,7 @@ import txaio
 from autobahn.wamp import transport
 from autobahn.wamp.types import ComponentConfig
 from autobahn.wamp.exception import TransportLost
+from autobahn.wamp.protocol import _ListenerCollection
 from autobahn.websocket.protocol import parseWsUrl
 
 
@@ -112,13 +113,17 @@ class Connection(object):
         """
 
         # public state (part of the API)
-        self.protocol = None
         self.connect_count = 0
         self.attempt_count = 0
-        self.session = None  # set below
+        self.on = _ListenerCollection(['join', 'leave', 'ready', 'connect', 'disconnect'])
+        # ^ should be same events as ApplicationSession!
 
         # private state / configuration
+        self._realm = realm  # could be public?
+        self._extra = extra  # could be public?
         self._session_factory = session_factory
+        self._session = None  # set in self._create_session()
+        self._protocol = None  # set when we've connected
         self._main = main
         self._connecting = None  # a Deferred/Future while connecting
         self._done = None  # a Deferred/Future that fires when we're done
@@ -136,11 +141,20 @@ class Connection(object):
         # instantiate our session
         if self._session_factory is None:
             self._session_factory = ApplicationSession
-        self._config = ComponentConfig(realm, extra)
-        self.session = self._session_factory(self._config)
+        self._create_session()
 
         # the reactor or asyncio event-loop
         self._loop = loop
+
+    def _create_session(self):
+        assert self._session_factory is not None
+        self._config = ComponentConfig(self._realm, self._extra)
+        self.session = self._session_factory(self._config)
+        self.session.on('connect', self._on_connect)
+        self.session.on('join', self._on_join)
+        self.session.on('ready', self._on_ready)
+        self.session.on('leave', self._on_leave)
+        self.session.on('disconnect', self._on_disconnect)
 
     def open(self):
         """
@@ -168,9 +182,6 @@ class Connection(object):
         self.attempt_count += 1
         self._done = txaio.create_future()
         self._main_done = None
-        # this will resolve the _done future (good or bad)
-        self.session.on('disconnect', self._on_disconnect)
-        self.session.on('leave', self._on_leave)
 
         self._connecting = txaio.as_future(
             self._connect_to, transport_config, self.session,
@@ -234,12 +245,22 @@ class Connection(object):
         if not txaio.is_called(self._main_done):
             txaio.reject(self._main_done, fail)
 
+    def _on_connect(self, session):
+        return self.on.connect._notify(session)
+
+    def _on_join(self, session, details):
+        return self.on.join._notify(session, details)
+
+    def _on_ready(self, session):
+        return self.on.ready._notify(session)
+
     def _on_leave(self, session, details):
         if details.reason.startswith('wamp.error.'):
             fail = txaio.create_failure(
                 Exception('{0}: {1}'.format(details.reason, details.message))
             )
             txaio.reject(self._done, fail)
+        return self.on.leave._notify(session, details)
 
     def _on_disconnect(self, session, reason):
         def _really_done(arg):
@@ -253,6 +274,8 @@ class Connection(object):
         def _error(fail):
             print(txaio.failure_format_traceback(fail))
         txaio.add_callbacks(self._main_done, _really_done, _error)
+        d = self.on.disconnect._notify(session, reason)
+        self._main_done.addBoth(lambda _: d)
         return self._main_done
 
     def __str__(self):

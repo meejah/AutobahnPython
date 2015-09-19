@@ -31,7 +31,7 @@ import sys
 import inspect
 
 from twisted.internet.defer import inlineCallbacks, returnValue, DeferredList
-from twisted.internet.error import ReactorAlreadyRunning
+from twisted.internet.error import ReactorAlreadyRunning, ReactorNotRunning
 from twisted.internet.interfaces import IStreamClientEndpoint, IProtocolFactory, IReactorCore
 from twisted.internet.endpoints import clientFromString, UNIXClientEndpoint
 from twisted.internet.endpoints import TCP4ClientEndpoint
@@ -285,7 +285,10 @@ def run(connections, log_level='info', loop=None):
 
     def success(_):
         log.info('All connections have completed.')
-        loop.stop()
+        try:
+            loop.stop()
+        except ReactorNotRunning:
+            pass
 
     def startup():
         opens = []
