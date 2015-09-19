@@ -27,14 +27,10 @@ def _activate_token(token):
     print("  created user:", user)
     return user
 
-@inlineCallbacks
-def public_api(session):#connection):
-    #print('public_api', connection)
-    #session = connection.session
-    # db = yield connect_to_database()
-    print('public_api, connected on realm', session.config.realm)
 
-    details = yield session.joined
+@inlineCallbacks
+def public_api(session, details):
+    # db = yield connect_to_database()
     print("public_api joined, session_id={details.session}".format(details=details))
     yield session.register(_activate_token, u"com.example.activate")
 
@@ -42,9 +38,6 @@ def public_api(session):#connection):
         session.leave()
     yield session.register(quit, u"com.example.quit")
     yield session.publish(u"com.example.public_api.ready")
-
-    details = yield session.left
-    print("public_api completed: {details.reason}".format(details=details))
 
 
 def _create_token(user):
@@ -60,11 +53,7 @@ def _create_token(user):
 
 
 @inlineCallbacks
-def backend_api(session):#connection):
-    print('backend_api, connected on realm', session.config.realm)
-    #session = connection.session
-
-    details = yield session.joined
+def backend_api(session, details):
     print("backend_api joined, session_id={details.session}".format(details=details))
     yield session.register(_create_token, u"com.example.private.create_token")
     yield session.publish(u"com.example.private.ready")
@@ -72,13 +61,10 @@ def backend_api(session):#connection):
     def quit():
         session.leave()
     yield session.register(quit, u"com.example.private.quit")
-    details = yield session.left
-    print("backend_api completed:", details.reason)
+
 
 @inlineCallbacks
-def simulate_client(session):#connection):
-    #session = connection.session
-    yield session.joined
+def simulate_client(session, details):
     print("simluated client joined; waiting 1 second")
     yield sleep(1)
     print("  . calling private and public APIs:")
@@ -101,33 +87,27 @@ def simulate_client(session):#connection):
         session.call(u"com.example.quit")
         yield session.leave()
 
-@inlineCallbacks
-def run(reactor, entry_points):
+if __name__ == '__main__':
+    from autobahn.twisted.wamp import run
+    from functools import partial
+
     transports = [
         {
             "type": "websocket",
             "url": u"ws://127.0.0.1:8080/ws"
         }
     ]
-
     connections = []
-    for main in entry_points:
-        # print("entry:", main)
+    def main(ep, connection):
+        connection.on('join', ep)
+
+    for entry_point in [public_api, backend_api, simulate_client]:
         connections.append(
             Connection(
                 transports,
-                main=main,
+                main=partial(main, entry_point),
                 realm=u'realm1',
                 loop=reactor,
             )
         )
-
-    res = yield DeferredList([c.open() for c in connections])
-    print("all connections done", res)
-    reactor.stop()
-
-
-if __name__ == '__main__':
-    args = ([public_api, backend_api, simulate_client], )
-    txaio.start_logging(level='debug')
-    task.react(run, args)
+    run(connections)
