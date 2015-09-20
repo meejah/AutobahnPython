@@ -213,89 +213,6 @@ class BaseSession(ObservableMixin):
 ISession.register(BaseSession)
 
 
-class _Listener(object):
-    """
-    Internal helper.
-
-    A class which is instantiated to provide listener functionality
-    like:
-
-        # js-like
-        connection.on('open', callback)
-        # attribute-access style:
-        connection.on.open(callback)
-        # add/remove style:
-        connection.on.open.add(callback)
-        # they all need something like this for removal:
-        connection.on.open.remove(callback)
-
-    XXX I guess should probably decide on ONE way, but this
-    abstraction is nice to avoid copy-pasting code to track lists of
-    callbacks and invoke them wherever we need listeners...
-    """
-
-    log = txaio.make_logger()
-
-    def __init__(self):
-        self._listeners = set()
-
-    def add(self, callback):
-        """
-        Add a callback to this listener
-        """
-        self._listeners.add(callback)
-
-    __call__ = add  #: alias for "add"
-
-    def remove(self, callback):
-        """
-        Remove a callback from this listener
-        """
-        self._listeners.remove(callback)
-
-    def _notify(self, *args, **kw):
-        """
-        Calls all listeners with the specified args.
-
-        Returns a Deferred which callbacks when all the listeners
-        which return Deferreds/Futures have themselves completed.
-        """
-        calls = []
-
-        def failed(fail):
-            self.log.error("Notifying listener failed: {msg}", msg=txaio.failure_message(fail))
-            self.log.debug("{traceback}", traceback=txaio.failure_format_traceback(fail))
-
-        for cb in self._listeners:
-            f = txaio.as_future(cb, *args, **kw)
-            txaio.add_callbacks(f, None, failed)
-            calls.append(f)
-        return txaio.gather(calls)
-
-
-class _ListenerCollection(object):
-    """
-    Internal helper.
-
-    This collects all your valid event listeners together in one
-    object if you want.
-    """
-    def __init__(self, valid_events):
-        self._valid_events = valid_events
-        for e in valid_events:
-            setattr(self, e, _Listener())
-
-    def __call__(self, event, callback):
-        if event not in self._valid_events:
-            raise Exception("Invalid event '{}'".format(event))
-        getattr(self, event).add(callback)
-
-    def remove(self, event, callback):
-        if event not in self._valid_events:
-            raise Exception("Invalid event '{}'".format(event))
-        getattr(self, event).remove(callback)
-
-
 class ApplicationSession(BaseSession):
     """
     WAMP endpoint session. This class implements
@@ -332,20 +249,15 @@ class ApplicationSession(BaseSession):
         """
         Constructor.
         """
-        BaseSession.__init__(self)
+        super(ApplicationSession, self).__init__()
         self.config = config or types.ComponentConfig(realm=u"default")
-
-        # events which can be listened for
-        # XXX so can do:
-        #    session.on.join(callback)
-        #    session.on.leave(callback)
-        #    session.on.join.remove(callback)
-        # or:
-        #    session.on.join.add(callback)
-        # or:
-        #    session.on('join', callback)
-        #    session.on.remove('join', callback)
-        self.on = _ListenerCollection(['join', 'leave', 'ready', 'connect', 'disconnect'])
+        self._set_valid_events([
+            'join',             # after on_join
+            'leave',            # after on_leave
+            'ready',            # after all Deferreds from on_join + joins fire
+            'connect',          # after on_connect
+            'disconnect',       # after on_disconnect
+        ])
 
         self._transport = None
         self._session_id = None
@@ -379,7 +291,6 @@ class ApplicationSession(BaseSession):
         d = txaio.as_future(self.onConnect)
 
         def do_connect(rtn):
-            # d1 = self.on.connect._notify(self)
             d1 = self.fire('connect', self)
             txaio.add_callbacks(d1, lambda _: rtn, None)
         txaio.add_callbacks(d, do_connect, None)
@@ -484,10 +395,8 @@ class ApplicationSession(BaseSession):
 
                 details = SessionDetails(self._realm, self._session_id, msg.authid, msg.authrole, msg.authmethod)
 
-                # d = self.on.join._notify(self, details)
                 d = self.fire('join', self, details)
                 txaio.add_callbacks(d, lambda _: txaio.as_future(self.onJoin, details), None)
-                # txaio.add_callbacks(d, lambda _: self.on.ready._notify(self), None)
                 txaio.add_callbacks(d, lambda _: self.fire('ready', self), None)
 
                 def _error(e):
@@ -502,7 +411,6 @@ class ApplicationSession(BaseSession):
                 # transport
                 details = types.CloseDetails(msg.reason, msg.message)
 
-                # d = self.on.leave._notify(self, details)
                 d = self.fire('leave', self, details)
                 txaio.add_callbacks(d, lambda _: txaio.as_future(self.onLeave, details), None)
 
@@ -524,7 +432,6 @@ class ApplicationSession(BaseSession):
                     self._transport.send(reply)
                     # fire callback and close the transport
                     details = types.CloseDetails(reply.reason, reply.message)
-                    # d = self.on.leave._notify(self, details)
                     d = self.fire('leave', self, details)
                     txaio.add_callbacks(d, lambda _: txaio.as_future(self.onLeave, details), None)
 
@@ -552,7 +459,6 @@ class ApplicationSession(BaseSession):
 
                 # fire callback and close the transport
                 details = types.CloseDetails(msg.reason, msg.message)
-                # d = self.on.leave._notify(self, details)
                 d = self.fire('leave', self, details)
                 txaio.add_callbacks(d, lambda _: txaio.as_future(self.onLeave, details), None)
 
@@ -887,7 +793,6 @@ class ApplicationSession(BaseSession):
             # fire callback and close the transport
             details = types.CloseDetails(reason=types.CloseDetails.REASON_TRANSPORT_LOST,
                                          message="WAMP transport was lost without closing the session before")
-            # d = self.on.leave._notify(self, details)
             d = self.fire('leave', self, details)
             txaio.add_callbacks(d, lambda _: txaio.as_future(self.onLeave, details), None)
 
@@ -906,7 +811,6 @@ class ApplicationSession(BaseSession):
 
         def notify_disconnect(rtn):
             detail = 'closed' if wasClean else 'lost'
-            # d1 = self.on.disconnect._notify(self, detail)
             d1 = self.fire('disconnect', self, detail)
             txaio.add_callbacks(d1, lambda _: rtn, None)
             return d1

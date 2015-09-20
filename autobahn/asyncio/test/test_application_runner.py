@@ -30,11 +30,10 @@ import unittest2 as unittest
 
 import txaio
 
-from autobahn.wamp.runner import Connection
-from autobahn.wamp.protocol import _ListenerCollection
+from autobahn.util import ObservableMixin
 from autobahn.wamp.interfaces import ISession
 
-from autobahn.asyncio.wamp import ApplicationRunner
+from autobahn.asyncio.wamp import ApplicationRunner, Connection
 
 # Asyncio tests.
 try:
@@ -56,10 +55,11 @@ except ImportError:
         asyncio.gather(*asyncio.Task.all_tasks())
 
 
-class FakeSession(object):
+class FakeSession(ObservableMixin):
     def __init__(self, config):
+        super(FakeSession, self).__init__()
         self.config = config
-        self.on = _ListenerCollection(['join', 'leave', 'ready', 'connect', 'disconnect'])
+        self._set_valid_events(['join', 'leave', 'ready', 'connect', 'disconnect'])
 
     def onOpen(self, *args, **kw):
         print('onOpen', args, kw)

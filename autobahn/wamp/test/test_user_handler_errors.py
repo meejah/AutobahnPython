@@ -53,7 +53,7 @@ if os.environ.get('USE_TWISTED', False):
         '''
 
         def __init__(self, *args, **kw):
-            ApplicationSession.__init__(self, *args, **kw)
+            super(MockApplicationSession, self).__init__(*args, **kw)
             self.errors = []
             self._transport = MockTransport()
 

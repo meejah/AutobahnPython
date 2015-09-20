@@ -34,13 +34,12 @@ from autobahn.wamp import transport
 from autobahn.util import ObservableMixin
 from autobahn.wamp.types import ComponentConfig
 from autobahn.wamp.exception import TransportLost
-from autobahn.wamp.protocol import _ListenerCollection
 from autobahn.websocket.protocol import parseWsUrl
 
 
 # XXX move to transport? protocol
 # XXX should at least move to same file as the "connect_to" things?
-class Connection(ObservableMixin):
+class _Connection(ObservableMixin):
     """
     This represents configuration of a protocol and transport to make
     a WAMP connection to particular endpoints.
@@ -86,8 +85,7 @@ class Connection(ObservableMixin):
                  main=None,
                  realm=u"realm1",
                  extra=None,
-                 session_factory=None,
-                 loop=None):
+                 session_factory=None):
         """
         :param transports: a list of dicts configuring available
             transports. See :meth:`autobahn.wamp.transport.check` for
@@ -109,15 +107,13 @@ class Connection(ObservableMixin):
         :param session_factory: takes one argument (ComponentConfig) and
         creates an ISession provider.
         :type session_factory: ApplicationSession subclass or other ISession
-
-        :param loop: reactor/event-loop instance (or None for a default one)
-        :type loop: IReactorCore (Twisted) or EventLoop (asyncio)
         """
 
         # public state (part of the API)
         self.connect_count = 0
         self.attempt_count = 0
-        self.on = _ListenerCollection(['join', 'leave', 'ready', 'connect', 'disconnect'])
+        super(_Connection, self).__init__()
+        self._set_valid_events(['join', 'leave', 'ready', 'connect', 'disconnect'])
         # ^ should be same events as ApplicationSession!
 
         # private state / configuration
@@ -139,23 +135,18 @@ class Connection(ObservableMixin):
             transports = [dict(url=six.u(transports), type="websocket")]
         self._transport_gen = itertools.cycle(transports)
 
-        # figure out which connect_to implementation we need
-        if txaio.using_twisted:
-            from autobahn.twisted.wamp import connect_to, ApplicationSession
-        else:
-            from autobahn.asyncio.wamp import connect_to, ApplicationSession
-        self._connect_to = connect_to
-
         # instantiate our session
-        if self._session_factory is None:
-            self._session_factory = ApplicationSession
         self._create_session()
 
-        # the reactor or asyncio event-loop
-        self._loop = loop
+    def _connect_to(self, *args, **kw):
+        raise Exception("Instantiate a framework-specific Connection")
+
+    def _default_session_factory(self):
+        raise Exception("Instantiate a framework-specific Connection")
 
     def _create_session(self):
-        assert self._session_factory is not None
+        if self._session_factory is None:
+            self._session_factory = self._default_session_factory()
         self._config = ComponentConfig(self._realm, self._extra)
         self.session = self._session_factory(self._config)
         self.session._parent = self
@@ -189,10 +180,7 @@ class Connection(ObservableMixin):
         self._done = txaio.create_future()
         self._main_done = None
 
-        self._connecting = txaio.as_future(
-            self._connect_to, transport_config, self.session,
-            loop=self._loop,
-        )
+        self._connecting = txaio.as_future(self._connect_to, transport_config)
 
         def on_error(fail):
             # XXX would it aid debugging if we re-threw a (new)

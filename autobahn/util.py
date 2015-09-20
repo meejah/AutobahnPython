@@ -469,8 +469,15 @@ class ObservableMixin(object):
     def __init__(self, parent=None):
         self._parent = parent
         self._listeners = {}
+        self._valid_events = None
+
+    def _set_valid_events(self, names):
+        self._valid_events = names
 
     def on(self, event, handler):
+        if self._valid_events is not None:
+            if event not in self._valid_events:
+                raise Exception("Invalid event '{0}'".format(event))
         if event not in self._listeners:
             self._listeners[event] = set()
         self._listeners[event].add(handler)
@@ -479,6 +486,9 @@ class ObservableMixin(object):
         if event is None:
             self._listeners = {}
         else:
+            if self._valid_events is not None:
+                if event not in self._valid_events:
+                    raise Exception("Invalid event '{0}'".format(event))
             if event in self._listeners:
                 if handler is None:
                     del self._listeners[event]
@@ -486,6 +496,9 @@ class ObservableMixin(object):
                     self._listeners[event].discard(handler)
 
     def fire(self, event, *args, **kwargs):
+        if self._valid_events is not None:
+            if event not in self._valid_events:
+                raise Exception("Invalid event '{0}'".format(event))
         res = []
         if event in self._listeners:
             for handler in self._listeners[event]:

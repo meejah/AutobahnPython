@@ -37,19 +37,19 @@ from zope.interface import implementer
 
 from mock import Mock
 
-from autobahn.twisted.wamp import ApplicationRunner
-from autobahn.wamp.runner import Connection
+from autobahn.twisted.wamp import ApplicationRunner, Connection
 from autobahn.wamp.exception import TransportLost
 from autobahn.wamp.interfaces import ISession
-from autobahn.wamp.protocol import _ListenerCollection
+from autobahn.util import ObservableMixin
 
 import txaio
 
 
-class FakeSession(object):
+class FakeSession(ObservableMixin):
     def __init__(self, config):
+        super(FakeSession, self).__init__()
         self.config = config
-        self.on = _ListenerCollection(['join', 'leave', 'ready', 'connect', 'disconnect'])
+        self._set_valid_events(['join', 'leave', 'ready', 'connect', 'disconnect'])
 
     def onOpen(self, *args, **kw):
         print('onOpen', args, kw)
@@ -102,7 +102,7 @@ class TestWampTwistedRunner(unittest.TestCase):
         '''
         exception = ConnectionRefusedError("It's a trap!")
         mockreactor = FakeReactor(exception)
-        runner = ApplicationRunner(u'ws://localhost:1', u'realm', loop=mockreactor)
+        runner = ApplicationRunner(u'ws://localhost:1', u'realm', reactor=mockreactor)
 
         self.assertRaises(
             ConnectionRefusedError,
@@ -122,7 +122,7 @@ class TestApplicationRunner(unittest.TestCase):
         fakereactor.run = Mock()
         fakereactor.stop = Mock()
         fakereactor.connectTCP = Mock(side_effect=raise_error)
-        runner = ApplicationRunner(u'ws://fake:1234/ws', u'dummy realm', loop=fakereactor)
+        runner = ApplicationRunner(u'ws://fake:1234/ws', u'dummy realm', reactor=fakereactor)
 
         # we should get "our" RuntimeError when we call run
         self.assertRaises(RuntimeError, runner.run, raise_error)
@@ -140,7 +140,7 @@ class TestApplicationRunner(unittest.TestCase):
         fakereactor.run = Mock()
         fakereactor.stop = Mock()
         fakereactor.connectTCP = Mock(side_effect=raise_error)
-        runner = ApplicationRunner(u'ws://fake:1234/ws', u'dummy realm', loop=fakereactor)
+        runner = ApplicationRunner(u'ws://fake:1234/ws', u'dummy realm', reactor=fakereactor)
 
         try:
             yield runner.run(raise_error, start_reactor=False)
@@ -161,7 +161,7 @@ class TestApplicationRunner(unittest.TestCase):
         fakereactor.run = Mock()
         fakereactor.stop = Mock()
         fakereactor.connectTCP = Mock(return_value=succeed(proto))
-        runner = ApplicationRunner(u'ws://fake:1234/ws', u'dummy realm', loop=fakereactor)
+        runner = ApplicationRunner(u'ws://fake:1234/ws', u'dummy realm', reactor=fakereactor)
 
         d = runner.run(Mock(), start_reactor=False)
 
@@ -207,7 +207,7 @@ class TestConnection(unittest.TestCase):
             self.config = config
             self.session = FakeSession(config)
             return self.session
-        self.connection = Connection(transports=self.transports, session_factory=create_session, loop=self.loop)
+        self.connection = Connection(transports=self.transports, session_factory=create_session, reactor=self.loop)
 
     def test_failed_open(self):
         """If the connect fails, the future/deferred from .open() should fail"""

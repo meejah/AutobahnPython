@@ -48,8 +48,9 @@ from autobahn.websocket.protocol import parseWsUrl
 from autobahn.twisted.websocket import WampWebSocketClientFactory
 from autobahn.twisted.rawsocket import WampRawSocketClientFactory
 from autobahn.wamp import protocol
+from autobahn.wamp import connection
+from autobahn.wamp.runner import _ApplicationRunner
 from autobahn.wamp.types import ComponentConfig
-from autobahn.wamp.runner import _ApplicationRunner, Connection
 
 import txaio
 txaio.use_twisted()
@@ -60,7 +61,6 @@ __all__ = [
     'ApplicationSessionFactory',
     'ApplicationRunner',
     'Connection',
-    'connect_to',
     'Application',
     'Service',
 ]
@@ -180,12 +180,9 @@ def _connect_stream(reactor, config, wamp_transport_factory, hostname=None):
         else:
             raise Exception("invalid endpoint type '{}'".format(config['type']))
 
-        return endpoint.connect(wamp_transport_factory)
+    return endpoint.connect(wamp_transport_factory)
 
 
-# needs custom asycio vs Twisted (because where the imports come from)
-# -- or would have to do "if txaio.using_twisted():" etc switch-type
-# statement.
 def _create_wamp_factory(reactor, cfg, session_factory):
     """
     Internal helper.
@@ -209,55 +206,64 @@ def _create_wamp_factory(reactor, cfg, session_factory):
         raise RuntimeError("Unknown WAMP type '{}'".format(kind))
 
 
-# XXX THINK move to transport.py?
-# XXX the shutdown hooks being different between asyncio/twisted makes this hard to be generic :(
-@inlineCallbacks
-def connect_to(transport_config, session, loop=None):
-    """:param reactor: the reactor to use (or None for default)
+class Connection(connection._Connection):
+    def __init__(self,
+                 transports=u"ws://127.0.0.1:8080/ws",
+                 main=None,
+                 realm=u"realm1",
+                 extra=None,
+                 session_factory=None,
+                 reactor=None):
+        if reactor is None:
+            from twisted.internet import reactor
+        self._reactor = reactor
+        super(Connection, self).__init__(transports=transports, main=main, realm=realm,
+                                         extra=extra, session_factory=session_factory)
 
-    :param transport_config: dict containing valid client transport
-    config (see :mod:`autobahn.wamp.transport`) XXX maybe this should
-    just demand an actual Factory? or accept either a dict (==config)
-    or an IFactory provider? (to be consistent with asking for a
-    straight ISession, instead of config)
+    def _default_session_factory(self):
+        return ApplicationSession
 
-    :param session: an ISession (e.g. ApplicationSession subclass)
+    @inlineCallbacks
+    def _connect_to(self, transport_config):
+        """
+        :param transport_config: dict containing valid client transport
+        config (see :mod:`autobahn.wamp.transport`) XXX maybe this should
+        just demand an actual Factory? or accept either a dict (==config)
+        or an IFactory provider? (to be consistent with asking for a
+        straight ISession, instead of config)
 
-    :returns: Deferred that callbacks with a protocol instance after a
-    connection has been made (not necessarily a WAMP session joined
-    yet, however)
+        :returns: Deferred that callbacks with a protocol instance after a
+        connection has been made (not necessarily a WAMP session joined
+        yet, however)
 
-    """
+        """
 
-    def create():
-        return session
+        def create():
+            assert self._session is not None
+            return self._session
 
-    reactor = loop
-    if loop is None:
-        from twisted.internet import reactor
+        if IProtocolFactory.providedBy(transport_config):
+            transport_factory = transport_config
+        else:
+            transport_factory = _create_wamp_factory(self._reactor, transport_config, create)
 
-    if IProtocolFactory.providedBy(transport_config):
-        transport_factory = transport_config
-    else:
-        transport_factory = _create_wamp_factory(reactor, transport_config, create)
+        _, host, port, _, _, _ = parseWsUrl(transport_config['url'])
+        if 'endpoint' in transport_config:
+            endpoint = transport_config['endpoint']
+        else:
+            endpoint = dict(host=host, port=port, type='tcp', version=4)
+        proto = yield _connect_stream(self._reactor, endpoint, transport_factory, hostname=host)
 
-    _, host, port, _, _, _ = parseWsUrl(transport_config['url'])
-    if 'endpoint' in transport_config:
-        endpoint = transport_config['endpoint']
-    else:
-        endpoint = dict(host=host, port=port, type='tcp', version=4)
-    proto = yield _connect_stream(reactor, endpoint, transport_factory, hostname=host)
+        # as the reactor/event-loop shuts down, we wish to wait until we've sent
+        # out our "Goodbye" message; leave() returns a Deferred that
+        # fires when the transport gets to STATE_CLOSED
+        def cleanup():
+            if hasattr(proto, '_session') and proto._session is not None:
+                if proto._session._session_id:
+                    return proto._session.leave()
+        self._reactor.addSystemEventTrigger('before', 'shutdown', cleanup)
 
-    # as the reactor/event-loop shuts down, we wish to wait until we've sent
-    # out our "Goodbye" message; leave() returns a Deferred that
-    # fires when the transport gets to STATE_CLOSED
-    def cleanup():
-        if hasattr(proto, '_session') and proto._session is not None:
-            if proto._session._session_id:
-                return proto._session.leave()
-    reactor.addSystemEventTrigger('before', 'shutdown', cleanup)
-
-    returnValue(proto)
+        returnValue(proto)
 
 
 # this replaces ApplicationRunner, and is the preferred API. Or, call
@@ -336,6 +342,10 @@ class ApplicationRunner(_ApplicationRunner):
     ``ApplicationSession`` (or subclass) instance.
     """
 
+    def __init__(self, url_or_transports, realm=u'default', extra=None, reactor=None):
+        super(ApplicationRunner, self).__init__(url_or_transports, realm=realm, extra=extra)
+        self._reactor = reactor
+
     def run(self, session_factory, start_reactor=True):
         """
         Run an application component.
@@ -359,11 +369,11 @@ class ApplicationRunner(_ApplicationRunner):
             connection is first established (WAMP session not yet
             joined at this point).
         """
-        loop = self._loop
-        if loop is None:
-            from twisted.internet import reactor as loop
+        reactor = self._reactor
+        if reactor is None:
+            from twisted.internet import reactor
         txaio.use_twisted()
-        txaio.config.loop = loop
+        txaio.config.loop = reactor
 
         # XXX FIXME should we really start logging automagically? or
         # not... or provide a "start_logging=True" kwarg?
@@ -373,11 +383,11 @@ class ApplicationRunner(_ApplicationRunner):
         txaio.start_logging(out=sys.stdout, level='info')
 
         connection = Connection(
-            self._transports,
-            session_factory,
+            transports=self._transports,
+            session_factory=session_factory,
             realm=self.realm,
             extra=self.extra,
-            loop=loop,
+            reactor=reactor,
         )
 
         # if the user didn't ask us to start the reactor, then they
@@ -393,11 +403,12 @@ class ApplicationRunner(_ApplicationRunner):
                 def __call__(self, failure):
                     self.exception = failure.value
                     self.log.critical(txaio.failure_message(failure))
+                    return failure
             connect_error = ErrorCollector()
 
             def shutdown(_):
                 try:
-                    IReactorCore(loop).stop()
+                    IReactorCore(reactor).stop()
                 except ReactorAlreadyRunning:
                     pass
 
@@ -406,10 +417,10 @@ class ApplicationRunner(_ApplicationRunner):
                 d.addErrback(connect_error)
                 d.addBoth(shutdown)
                 return d
-            IReactorCore(loop).callWhenRunning(startup)
+            IReactorCore(reactor).callWhenRunning(startup)
 
             # now enter the Twisted reactor loop
-            IReactorCore(loop).run()
+            IReactorCore(reactor).run()
 
             # if we exited due to a connection error, raise that to the
             # caller

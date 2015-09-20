@@ -27,10 +27,10 @@
 from __future__ import absolute_import, print_function
 import signal
 
-from autobahn.wamp import protocol
+from autobahn.wamp import protocol, connection
 from autobahn.websocket.protocol import parseWsUrl
 from autobahn.asyncio.websocket import WampWebSocketClientFactory
-from autobahn.wamp.runner import _ApplicationRunner, Connection
+from autobahn.wamp.runner import _ApplicationRunner
 
 try:
     import asyncio
@@ -48,7 +48,6 @@ __all__ = (
     'ApplicationSessionFactory',
     'ApplicationRunner',
     'Connection',
-    'connect_to',
 )
 
 
@@ -128,51 +127,61 @@ def _create_wamp_factory(reactor, cfg, session_factory):
     return WampWebSocketClientFactory(session_factory, url=cfg['url'])
 
 
-# XXX counter-intuitively (?) this is called via the common Connection
-# class in wamp/runner.py when used internally -- but does need a
-# custom asyncio/twisted implementation because of the different way
-# shutdown works.
+class Connection(connection._Connection):
+    def __init__(self,
+                 transports=u"ws://127.0.0.1:8080/ws",
+                 main=None,
+                 realm=u"realm1",
+                 extra=None,
+                 session_factory=None,
+                 loop=None):
+        if loop is None:
+            loop = asyncio.get_event_loop()
+        self._loop = loop
+        super(Connection, self).__init__(transports=transports, main=main, realm=realm,
+                                         extra=extra, session_factory=session_factory)
 
+    def _default_session_factory(self):
+        return ApplicationSession
 
-def connect_to(transport_config, session, loop=None):
-    """
-    :param transport_config: dict containing valid client transport
-    config (see :mod:`autobahn.wamp.transport`)
+    def _connect_to(self, transport_config):
+        """
+        :param transport_config: dict containing valid client transport
+        config (see :mod:`autobahn.wamp.transport`)
 
-    :param session: an instance providing ISession (i.e. an
-    ApplicationSession subclass)
+        :returns: Future that callbacks with a protocol instance after a
+        connection has been made (not necessarily a WAMP session joined
+        yet, however)
+        """
 
-    :returns: Future that callbacks with a protocol instance after a
-    connection has been made (not necessarily a WAMP session joined
-    yet, however)
-    """
+        def create():
+            assert self._session is not None
+            return self._session
 
-    def create():
-        return session
+        loop = self._loop
+        if loop is None:
+            loop = asyncio.get_event_loop()
+        transport_factory = _create_wamp_factory(self._loop, transport_config, create)
+        f0 = txaio.as_future(_connect_stream, self._loop, transport_config, transport_factory)
 
-    if loop is None:
-        loop = asyncio.get_event_loop()
-    transport_factory = _create_wamp_factory(loop, transport_config, create)
-    f0 = txaio.as_future(_connect_stream, loop, transport_config, transport_factory)
+        # mutate the return value of _connect_stream to be just the
+        # protocol so that the API of connect_to is the "same" for Twisted
+        # and asyncio (although the protocol returned is a native Twisted
+        # or asyncio object).
+        # both provide protocol.transport to get the transport
 
-    # mutate the return value of _connect_stream to be just the
-    # protocol so that the API of connect_to is the "same" for Twisted
-    # and asyncio (although the protocol returned is a native Twisted
-    # or asyncio object).
-    # both provide protocol.transport to get the transport
+        # XXX is there a better idiom for this in asyncio?
+        f1 = asyncio.Future()
 
-    # XXX is there a better idiom for this in asyncio?
-    f1 = asyncio.Future()
-
-    def return_proto(result):
-        try:
-            transport, protocol = result.result()
-            transport.connectionLost = protocol.connection_lost
-            f1.set_result(protocol)
-        except Exception as e:
-            f1.set_exception(e)
-    f0.add_done_callback(return_proto)
-    return f1
+        def return_proto(result):
+            try:
+                transport, protocol = result.result()
+                transport.connectionLost = protocol.connection_lost
+                f1.set_result(protocol)
+            except Exception as e:
+                f1.set_exception(e)
+        f0.add_done_callback(return_proto)
+        return f1
 
 
 class ApplicationRunner(_ApplicationRunner):
@@ -186,6 +195,10 @@ class ApplicationRunner(_ApplicationRunner):
     If you need lower-level control than that, see :meth:`connect_to`
     which attempts a single connection to a single transport.
     """
+
+    def __init__(self, url_or_transports, realm=u'default', extra=None, loop=None):
+        super(ApplicationRunner, self).__init__(url_or_transports, realm=realm, extra=extra)
+        self._loop = loop
 
     def run(self, session_factory):
         """
