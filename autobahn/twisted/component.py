@@ -30,7 +30,7 @@ from __future__ import absolute_import, print_function
 import itertools
 from functools import partial
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks  # XXX FIXME
 from twisted.internet.interfaces import IStreamClientEndpoint
 from twisted.internet.endpoints import UNIXClientEndpoint
 from twisted.internet.endpoints import TCP4ClientEndpoint
@@ -231,6 +231,10 @@ def _create_transport_endpoint(reactor, endpoint_config):
     return endpoint
 
 
+def run(reactor, component_or_components):
+    pass
+
+
 class Component(component.Component):
     """
     A component establishes a transport and attached a session
@@ -363,6 +367,8 @@ class Component(component.Component):
                         # level, e.g. SyntaxError?
                         self.log.debug(u'{tb}', tb=txaio.failure_format_traceback(f))
                         raise
+                    # XXX if moving realm to transport, no_such_realm
+                    # is no longer automagically a 'fatal error'...
                 else:
                     reconnect = False
             else:
@@ -372,8 +378,14 @@ class Component(component.Component):
                     self.log.info("No remaining transports to try")
                     reconnect = False
 
+    def stop(self):
+        return self._session.leave()
+
 
 def _run(reactor, components):
+    log = txaio.make_logger()
+    # let user pass a single component to run, too
+    # XXX probably want IComponent? only demand it, here and below?
     if isinstance(components, Component):
         components = [components]
 
@@ -401,6 +413,15 @@ def _run(reactor, components):
         log.debug("Component error: {tb}", tb=txaio.failure_format_traceback(f))
         return None
 
+    def component_success(c, arg):
+        log.info("Component {c} successfully completed {arg}", c=c, arg=arg)
+        return arg
+
+    def component_failure(f):
+        log.error("Component error: {msg}", msg=txaio.failure_format_message(f))
+        log.debug("Component error: {tb}", tb=txaio.failure_format_traceback(f))
+        return arg
+
     # all components are started in parallel
     dl = []
     for c in components:
@@ -419,10 +440,20 @@ def _run(reactor, components):
 
     txaio.add_callbacks(d, all_done, all_done)
 
+    def success(arg):
+        log.info("success!" + str(arg))
+
+    def failure(arg):
+        log.info("fail")
+
+    txaio.add_callbacks(d, success, failure)
     return d
 
 
-def run(components):
+def run(components, log_level='info'):
     # only for Twisted > 12
     from twisted.internet.task import react
+
+    if log_level is not None:
+        txaio.start_logging(level=log_level)
     react(_run, [components])
