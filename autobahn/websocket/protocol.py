@@ -770,6 +770,7 @@ class WebSocketProtocol(object):
 
         elif self.state == WebSocketProtocol.STATE_CLOSED:
             # The peer initiated a closing handshake but dropped the TCP immediately.
+            print("ALREADYCLOSED")
             self.wasClean = False
 
         else:
@@ -875,6 +876,7 @@ class WebSocketProtocol(object):
 
             if self.failByDrop:
                 # brutally drop the TCP connection
+                print("ALWAYS FAIL")
                 self.wasClean = False
                 self.wasNotCleanReason = u'I failed the WebSocket connection by dropping the TCP connection'
                 self.dropConnection(abort=True)
