@@ -661,6 +661,249 @@ if service:
             client.setServiceParent(self)
 
 
+from autobahn.wamp import cryptosign
+from zope.interface import implementer, Interface, Attribute
+
+
+# XXX playing with a nicer authentication API than "override
+# onConnect() and you must do everything by hand"...
+
+class IWampAuthenticationMethod(Interface):
+    """
+    Defines the interface which a WAMP authentication must
+    provide. Typically, you should be able to "just use" one of the
+    built-in implementers of this interface.
+
+    If you wish to implement your own authentication, you can either
+    provide an object that implements this API (preferred) **or**
+    subclass ApplicationSession and override onConnect.
+
+    There are built-in objects that implement this interface for
+    existing WAMP authentication methods.
+    """
+
+    wamp_method_name = Attribute(
+        "The unicode string that is the name by which this authentication"
+        " method is known to WAMP (e.g. u'cryptosign', or u'wampcra')"
+    )
+
+    def get_authextra(self):
+        """
+        Return a dict() containing any additional information this
+        authenticator needs to pass along with the join() call.
+        """
+
+    def on_challenge(self, challenge):
+        """
+        Called with the challenge object when a Session gets onChallenge
+        for this authentication method. May be async. Must return a
+        signature (i.e. answer to the challenge).
+        """
+
+
+@implementer(IWampAuthenticationMethod)
+class CryptoSignAuthenticator(object):
+    """
+    Implments WAMP-CryptoSign for use as a Session authenticator
+    """
+
+    wamp_method_name = u'cryptosign'
+
+    @classmethod
+    def from_config(cls, config):
+        assert config.get(u'name', None) == cls.wamp_method_name
+        return cls(
+            key_data=config.get('key_data', None),
+            key_fname=config.get('key_fname', None),
+        )
+
+    def __init__(self, key_data=None, key_fname=None):
+        if key_data is not None and key_fname is not None:
+            raise ValueError(
+                "Cannot pass both 'key_data' and 'key_fname'"
+            )
+        if key_data is not None:
+            self._key = cryptosign.SigningKey.from_data(key_data)
+        elif key_fname is not None:
+            self._key = cryptosign.SigningKey.from_raw_key(key_fname)
+        else:
+            raise ValueError(
+                "cryptosign authenticator requires one of 'key_data' "
+                "or 'key_fname'"
+            )
+
+    def get_authextra(self):
+        return {
+            u'pubkey': self._key.public_key(),
+            u'channel_binding': u'tls-unique',
+        }
+
+    def on_challenge(self, session, challenge):
+        return self._key.sign_challenge(session, challenge)
+
+
+@implementer(IWampAuthenticationMethod)
+class ChallengeResponseAuthenticator(object):
+    """
+    Implments WAMP-CRA for use as a Session authenticator
+    """
+    wamp_method_name = u'wampcra'
+
+    @classmethod
+    def from_config(cls, config):
+        assert config.get(u'name', None) == cls.wamp_method_name
+        if u'secret' not in config:
+            raise ValueError("wampcra config requires 'secret' key")
+        return ChallengeResponseAuthenticator(config.get(u'secret'))
+
+    def __init__(self, secret):
+        self._secret = secret
+
+    def get_authextra(self):
+        return None
+
+    def on_challenge(self, session, challenge):
+        if u'salt' in challenge.extra:
+           # salted secret
+           key = auth.derive_key(
+               self._secret,
+               challenge.extra['salt'],
+               challenge.extra['iterations'],
+               challenge.extra['keylen'],
+           )
+        else:
+           # plain, unsalted secret
+           key = self._secret
+
+        # compute signature for challenge, using the key
+        return auth.compute_wcs(key, challenge.extra['challenge'])
+
+
+def authenticator_from_config(config):
+    """
+    Given a dict from the 'methods' list of a wamp authentication
+    config, this returns an instance implementing IWampAuthenticationMethod
+    (or exception).
+    """
+    for key in [u'name']:
+        if key not in config:
+            raise ValueError("method config requires '{}'".format(key))
+    name = config.get(u'name')
+    name_to_authenticator = {
+        u'wampcra': ChallengeResponseAuthenticator,
+        u'cryptosign': CryptoSignAuthenticator,
+    }
+    try:
+        return name_to_authenticator[name].from_config(config)
+    except KeyError:
+        raise ValueError(
+            "Unknown authentication method '{}'".format(name)
+        )
+
+
+class WampAuthenticator(object):
+    """
+    Represents configuration of authentication. This includes the
+    target realm, authid, any extra data. The actual authentication
+    methods are supported by objects implementing IWampAuthenticationMethod
+    """
+
+    @staticmethod
+    def from_config(config):
+        """
+        Given a config dict, this returns a fresh WampAuthenticator
+        instance. Config is:
+
+        - realm: (required) the realm to join
+        - authid: (optional) passed along as authid
+        - authextra: (optional) passed along as authextra
+        - methods: (required) list of acceptable methods to use, and their options
+
+        Each entry in the `methods` list should itself be a dict, with
+        the following keys:
+        - name: the name of a valid WAMP authentication method (e.g. "cryptosign")
+        - key_data: (cryptosign) hex-encoded private key data
+        - key_fname: (cryptosign) filename containing private key data
+        - secret: (wampcra) the WAMP-CRA secret
+        """
+        if not isinstance(config, dict):
+            raise ValueError("config must be a dict")
+
+        for key in config.keys():
+            if key not in [u'realm', u'methods', u'authid', u'authextra']:
+                raise ValueError("Unknown config key '{}'".format(key))
+
+        for key in [u'methods']:
+            if key not in config:
+                raise ValueError("config must contain key '{}'".format(key))
+
+        auth = WampAuthenticator(
+            config.get(u'realm'),
+            authid=config.get(u'authid', None),
+#            authextra=config.get(u'authextra', None),
+        )
+        for method_cfg in config['methods']:
+            auth.add_method(authenticator_from_config(method_cfg))
+        return auth
+
+    # XXX any need for *user* to pass authextra information here?
+    def __init__(self, realm, authid=None):
+        self._realm = realm
+        self._authid = authid
+        # maps method_name -> IWampAuthentication instance
+        self._authenticators = dict()
+
+    def join_session(self, session):
+        """
+        hook called by Session to allow us to do the .join() call on it
+        """
+        authextra = dict()
+        for name, method in self._authenticators.items():
+            extra = method.get_authextra()
+            for k, v in extra.items():
+                if k in authextra and authextra[k] != v:
+                    raise RuntimeError(
+                        "Conflicting authextra information; two different "
+                        "authenticators want to set '{}'. One wants '{}' and "
+                        "the other wants '{}'.".format(k, v, authextra[k])
+                    )
+                authextra[k] = v
+
+        return session.join(
+            self._realm,
+            authmethods=list(self._authenticators.keys()),
+            authid=self._authid,  # can be None
+            authextra=authextra,
+        )
+
+    def on_challenge(self, session, challenge):
+        """
+        hook called by Session when a challenge is received
+        """
+        try:
+            return self._authenticators[challenge.method].on_challenge(session, challenge)
+        except KeyError:
+            raise Exception(
+                "Got on_challenge for unknown authenticator '{}'".format(challenge.method)
+            )
+
+    def add_method(self, authenticator):
+        """
+        :param authenticator: an object implementing IWampAuthenticationMethod
+        """
+        if not IWampAuthenticationMethod.providedBy(authenticator):
+            raise ValueError(
+                "authenticator must provide IWampAuthentication"
+            )
+        method = authenticator.wamp_method_name
+        # XXX check method isinstance unicode?
+        if method in self._authenticators:
+            raise ValueError(
+                "Already have an authenticator for '{}'".format(method)
+            )
+        self._authenticators[method] = authenticator
+
+
 # new API
 class Session(ApplicationSession):
     # shim that lets us present pep8 API for user-classes to override,
@@ -675,8 +918,51 @@ class Session(ApplicationSession):
     def onJoin(self, details):
         return self.on_join(details)
 
-    # XXX def onChallenge(self, )
-    # XXX def onOpen ??
+    _authenticator = None
+    _did_connect = None
+
+    def set_authenticator(self, authenticator):
+        """
+        Set the WampAuthenticator instance used to do authentication for
+        this session. The recommended way to acquire one of these is
+        by calling :meth:`WampAuthenticator.from_config`.
+        """
+        if self._authenticator is not None:
+            raise ValueError(
+                "Already have an authenticator for session '{session_id}'".format(
+                    session_id=self._session_id,
+                )
+            )
+        if not isinstance(authenticator, WampAuthenticator):
+            raise ValueError(
+                "Authenticator must be an instance of WampAuthenticator"
+            )
+        self._authenticator = authenticator
+        # _did_connect is so that you could, in principle, still call
+        # set_authenticator in onJoin and have "the right stuff"
+        # happen (namely: it will immediately call
+        # authenticator.join_session())
+        if self._did_connect:
+            self.onConnect()
+
+    def onChallenge(self, challenge):
+        """
+        Do not override; not part of the public API. See
+        :meth:`autobahn.twisted.wamp.Session.set_authenticator`
+        """
+        if self._authenticator is not None:
+            return self._authenticator.on_challenge(self, challenge)
+        return None
+
+    def onConnect(self):
+        """
+        Do not override; not part of the public API. See
+        :meth:`autobahn.twisted.wamp.Session.set_authenticator`
+        """
+        self._did_connect = True
+        if self._authenticator is not None:
+            return self._authenticator.join_session(self)
+        return None
 
     def onLeave(self, details):
         return self.on_leave(details)

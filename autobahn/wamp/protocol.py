@@ -281,6 +281,8 @@ class ApplicationSession(BaseSession):
         Constructor.
         """
         BaseSession.__init__(self)
+        # XXX essentially this is only used for authentication ... but
+        # what about "downstream" classes?
         self.config = config or types.ComponentConfig(realm=u"default")
 
         self._transport = None

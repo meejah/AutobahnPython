@@ -38,7 +38,6 @@ from autobahn.websocket.util import parse_url
 from autobahn.wamp.types import ComponentConfig
 from autobahn.wamp.exception import ApplicationError
 
-
 __all__ = ('Connection')
 
 
@@ -211,7 +210,7 @@ class Component(ObservableMixin):
     TYPE_MAIN = 1
     TYPE_SETUP = 2
 
-    def __init__(self, main=None, setup=None, transports=None, config=None, realm=u'public'):
+    def __init__(self, main=None, setup=None, transports=None, config=None, authentication=None, realm=u'public'):
         """
 
         :param main: A callable that runs user code for the component. The component will be
@@ -234,6 +233,9 @@ class Component(ObservableMixin):
         :param realm: the realm to join
         :type realm: unicode
 
+        :param authenticator: an object implementing IWampAuthenticator, or None
+        :type authenticatior: :class:`autobahn.twisted.wamp.IWampAuthenticator`
+
         """
         self.set_valid_events(
             [
@@ -251,6 +253,12 @@ class Component(ObservableMixin):
 
         if setup is not None and not callable(setup):
             raise RuntimeError('"setup" must be a callable if given')
+
+        # XXX FIXME move code into this module, or 'auth'
+        from autobahn.twisted.wamp import WampAuthenticator
+        self._authenticator = None
+        if authentication:
+            self._authenticator = WampAuthenticator.from_config(authentication)
 
         if setup:
             self._entry = setup
@@ -284,6 +292,13 @@ class Component(ObservableMixin):
             idx += 1
 
         self._realm = realm
+        # XXX decide if 'realm' is part of the transport config, or a
+        # Component 'global' parameter (or, part of authenticators?)
+        self._realm = realm
+
+        # XXX can the _extra always be provided by auth too?
+        # (e.g. even Anonymous, in case you don't want to do "real"
+        # auth?) Or is that stretching and weird.
         self._extra = None  # XXX FIXME
 
     def _can_reconnect(self):
@@ -310,6 +325,8 @@ class Component(ObservableMixin):
             cfg = ComponentConfig(self._realm, self._extra)
             try:
                 session = self.session_factory(cfg)
+                if self._authenticator is not None:
+                    session.set_authenticator(self._authenticator)
             except Exception as e:
                 # couldn't instantiate session calls, which is fatal.
                 # let the reconnection logic deal with that

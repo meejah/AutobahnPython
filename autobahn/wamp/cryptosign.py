@@ -531,6 +531,41 @@ if HAS_CRYPTOSIGN:
             return cls(key, comment)
 
         @classmethod
+        def from_data(cls, keydata, comment=None):
+            """
+            Load an Ed25519 (private) signing key (actually, the seed for the
+            key) from a raw data (32 bytes).  This can be any random
+            byte sequence, such as generated from Python code like
+
+                os.urandom(32)
+
+            or from the shell
+
+                dd if=/dev/urandom of=client02.key bs=1 count=32
+
+            :param bytes keydata: Data for the key; 32 bytes.
+            :param comment: Comment for key (optional).
+            :type comment: unicode or None
+            """
+            if not (comment is None or type(comment) == six.text_type):
+                raise ValueError(
+                    "comment should be unicode, not {}".format(type(comment))
+                )
+
+            if not isinstance(keydata, bytes):
+                raise ValueError(
+                    "keydata should be bytes, not {}".format(type(keydata))
+                )
+
+            if len(keydata) != 32:
+                raise ValueError(
+                    "keydata should be 32, not {}".format(len(keydata))
+                )
+
+            key = signing.SigningKey(keydata)
+            return cls(key, comment)
+
+        @classmethod
         def from_ssh_key(cls, filename):
             """
             Load an Ed25519 key from a SSH key file. The key file can be a (private) signing
