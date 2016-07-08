@@ -24,11 +24,20 @@
 #
 ###############################################################################
 
+from autobahn.twisted.multisocket import MultiSocketServerProtocol, \
+    MultiSocketServerFactory
+
+#from autobahn.twisted.rawsocket import RawSocketServerProtocol, \
+#    RawSocketServerFactory
+
 from autobahn.twisted.websocket import WebSocketServerProtocol, \
     WebSocketServerFactory
 
+from twisted.web.server import Site
+from twisted.web.static import File
 
-class MyServerProtocol(WebSocketServerProtocol):
+
+class MyWebSocketServerProtocol(WebSocketServerProtocol):
 
     def onConnect(self, request):
         print("Client connecting: {0}".format(request.peer))
@@ -58,8 +67,12 @@ if __name__ == '__main__':
 
     txaio.start_logging(level='debug')
 
-    factory = WebSocketServerFactory(u"ws://127.0.0.1:9000")
-    factory.protocol = MyServerProtocol
+    website_factory = Site(File('.'))
 
-    reactor.listenTCP(9000, factory)
+    websocket_factory = WebSocketServerFactory(u"ws://127.0.0.1:8080/ws")
+    websocket_factory.protocol = MyWebSocketServerProtocol
+
+    multisocket_factory = MultiSocketServerFactory(websocket_factory_map={b'/ws': websocket_factory}, website_factory=website_factory)
+
+    reactor.listenTCP(8080, multisocket_factory)
     reactor.run()
