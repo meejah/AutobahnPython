@@ -261,26 +261,30 @@ class ISession(object):
     """
 
     @abc.abstractmethod
-    def on_connect(self):
+    def set_auth_config(self, config):
         """
-        Callback fired when the transport this session will run over has been established.
+        Configures authentication. `config` must be a `dict` which is
+        valid for
+        :meth:`autobahn.wamp.auth.WampAuthenticator.from_config`. This must be called *before* the connection is established.
         """
 
     @abc.abstractmethod
+    def configure_authentication(self):
+        """
+        This method is called once we've connected to retrieve the
+        authentication configuration. It can be async.
+
+        :returns: either None, a dict or a
+            :class:`autobahn.wamp.auth.WampAuthenticator` instance. If you
+            return None, a default configuration will be provided (which
+            will attempt anonymous authentication).
+
+        """
+        
     def join(self, realm):
+
         """
         Attach the session to the given realm. A session is open as soon as it is attached to a realm.
-        """
-
-    @abc.abstractmethod
-    def on_challenge(self, challenge):
-        """
-        Callback fired when the peer demands authentication.
-
-        May return a Deferred/Future.
-
-        :param challenge: The authentication challenge.
-        :type challenge: Instance of :class:`autobahn.wamp.types.Challenge`.
         """
 
     @abc.abstractmethod

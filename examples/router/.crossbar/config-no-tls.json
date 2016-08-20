@@ -70,7 +70,13 @@
                             }
                         },
                         "ws": {
-                            "type": "websocket"
+                            "type": "websocket",
+			    "auth": {
+				"anonymous": {
+                                    "type": "static",
+                                    "role": "anonymous"
+				}
+			    }
                         },
                         "auth_ws": {
                             "type": "websocket",

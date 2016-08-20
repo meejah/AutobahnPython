@@ -341,7 +341,10 @@ class Component(component.Component):
                     if isinstance(e, ApplicationError):
                         if e.error in [u'wamp.error.no_such_realm']:
                             reconnect = False
-                            self.log.error(u"Fatal error, not reconnecting")
+                            self.log.error(
+                                u"Fatal error ({error}), not reconnecting",
+                                error=e.error,
+                            )
                             raise
                         # self.log.error(u"{error}: {message}", error=e.error, message=e.message)
                     elif _is_ssl_error(e):

@@ -969,32 +969,41 @@ class Session(ApplicationSession):
     def onJoin(self, details):
         return self.on_join(details)
 
+    #: either None or a WampAuthenticator instance
     _authenticator = None
-    _did_connect = None
 
-    def set_authenticator(self, authenticator):
+    #: either None or a dict containing our authentication config
+    #: (updated from set_auth_config)
+    _authentication_config = None
+
+    def configure_authentication(self):
         """
-        Set the WampAuthenticator instance used to do authentication for
-        this session. The recommended way to acquire one of these is
-        by calling :meth:`WampAuthenticator.from_config`.
+        This can be overridden as described in the interface (and can be
+        async).
+
+        This default method returns the last config set by
+        `set_auth_config`, or return a new anonymous authentication
+        config if set_auth_config was never called.
+
         """
-        if self._authenticator is not None:
-            raise ValueError(
-                "Already have an authenticator for session '{session_id}'".format(
-                    session_id=self._session_id,
-                )
-            )
-        if not isinstance(authenticator, WampAuthenticator):
-            raise ValueError(
-                "Authenticator must be an instance of WampAuthenticator"
-            )
-        self._authenticator = authenticator
-        # _did_connect is so that you could, in principle, still call
-        # set_authenticator in onJoin and have "the right stuff"
-        # happen (namely: it will immediately call
-        # authenticator.join_session())
-        if self._did_connect:
-            self.onConnect()
+        if self._authentication_config is None:
+            self._authentication_config = {
+                "realm": self.config.realm,
+                "methods": [
+                    {
+                        "name": "anonymous",
+                    }
+                ]
+            }
+        return self._authentication_config
+
+    def set_auth_config(self, config):
+        """
+        :param dict config: Contains a config valid for
+        :meth:`autobahn.wamp.auth.WampAuthenticator.from_config`
+        """
+        self._authentication_config = dict()
+        self._authentication_config.update(config)
 
     def onChallenge(self, challenge):
         """
@@ -1005,15 +1014,27 @@ class Session(ApplicationSession):
             return self._authenticator.on_challenge(self, challenge)
         return None
 
+    @inlineCallbacks
     def onConnect(self):
         """
-        Do not override; not part of the public API. See
-        :meth:`autobahn.twisted.wamp.Session.set_authenticator`
+        Do not override; not part of the public API. Instead override
+        :meth:`autobahn.wamp.interfaces.Session.configure_authentication`
+        or call set_auth_config()
         """
-        self._did_connect = True
-        if self._authenticator is not None:
-            return self._authenticator.join_session(self)
-        return None
+        cfg = yield maybeDeferred(self.configure_authentication)
+        self._authenticator = None
+        if cfg is not None:
+            if isinstance(cfg, WampAuthenticator):
+                self._authenticator = cfg
+            elif isinstance(cfg, dict):
+                self._authenticator = WampAuthenticator.from_config(cfg)
+            else:
+                raise ValueError(
+                    "configure_authentication() must return a WampAuthenticator"
+                    " or dict or None"
+                )
+            yield self._authenticator.join_session(self)
+        return
 
     def onLeave(self, details):
         return self.on_leave(details)

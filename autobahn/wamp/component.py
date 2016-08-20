@@ -254,12 +254,6 @@ class Component(ObservableMixin):
         if setup is not None and not callable(setup):
             raise RuntimeError('"setup" must be a callable if given')
 
-        # XXX FIXME move code into this module, or 'auth'
-        from autobahn.twisted.wamp import WampAuthenticator
-        self._authenticator = None
-        if authentication:
-            self._authenticator = WampAuthenticator.from_config(authentication)
-
         if setup:
             self._entry = setup
             self._entry_type = Component.TYPE_SETUP
@@ -291,10 +285,17 @@ class Component(ObservableMixin):
             self._transports.append(Transport(idx, transport))
             idx += 1
 
-        self._realm = realm
         # XXX decide if 'realm' is part of the transport config, or a
         # Component 'global' parameter (or, part of authenticators?)
         self._realm = realm
+
+        # XXX FIXME move code into own module, or 'auth'
+        from autobahn.twisted.wamp import WampAuthenticator
+        self._authenticator = {"realm": realm}
+        if authentication:
+            # so, we can specify 'realm' in the config -- is that
+            # good, or bad? i.e. should one be removed?
+            self._authenticator.update(authentication)
 
         # XXX can the _extra always be provided by auth too?
         # (e.g. even Anonymous, in case you don't want to do "real"
@@ -326,7 +327,7 @@ class Component(ObservableMixin):
             try:
                 session = self.session_factory(cfg)
                 if self._authenticator is not None:
-                    session.set_authenticator(self._authenticator)
+                    session.set_auth_config(self._authenticator)
             except Exception as e:
                 # couldn't instantiate session calls, which is fatal.
                 # let the reconnection logic deal with that
