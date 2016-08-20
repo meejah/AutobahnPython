@@ -32,7 +32,7 @@ import inspect
 import txaio
 txaio.use_twisted()  # noqa
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, maybeDeferred
 
 from autobahn.websocket.util import parse_url as parse_ws_url
 from autobahn.rawsocket.util import parse_url as parse_rs_url
@@ -693,7 +693,7 @@ class IWampAuthenticationMethod(Interface):
         authenticator needs to pass along with the join() call.
         """
 
-    def on_challenge(self, challenge):
+    def on_challenge(self, session, challenge):
         """
         Called with the challenge object when a Session gets onChallenge
         for this authentication method. May be async. Must return a
@@ -809,8 +809,10 @@ class WampAuthenticator(object):
     """
 
     @staticmethod
-    def from_config(config):
+    def from_config(config, realm=None):
         """
+        :param realm str: a realm to use if one isn't provided in the config
+
         Given a config dict, this returns a fresh WampAuthenticator
         instance. Config is:
 
@@ -830,28 +832,66 @@ class WampAuthenticator(object):
             raise ValueError("config must be a dict")
 
         for key in config.keys():
-            if key not in [u'realm', u'methods', u'authid', u'authextra']:
+            # note: authextra provided by individual authenticator
+            if key not in [u'realm', u'methods', u'authid']:
                 raise ValueError("Unknown config key '{}'".format(key))
 
         for key in [u'methods']:
             if key not in config:
                 raise ValueError("config must contain key '{}'".format(key))
 
+        realm = config.get(u'realm', realm)
+        if realm is None:
+            raise ValueError("Session didn't provide 'realm' and neither did the config")
         auth = WampAuthenticator(
-            config.get(u'realm'),
+            realm,
             authid=config.get(u'authid', None),
-#            authextra=config.get(u'authextra', None),
         )
         for method_cfg in config['methods']:
             auth.add_method(authenticator_from_config(method_cfg))
         return auth
 
-    # XXX any need for *user* to pass authextra information here?
     def __init__(self, realm, authid=None):
+        if not isinstance(realm, six.text_type):
+            raise ValueError("realm must be a {} (got {})".format(
+                six.text_type.__name__,
+                realm.__class__.__name__,
+            ))
         self._realm = realm
         self._authid = authid
         # maps method_name -> IWampAuthentication instance
         self._authenticators = dict()
+
+    def add_method(self, authenticator):
+        """
+        :param authenticator: an object implementing IWampAuthenticationMethod
+        """
+        if not IWampAuthenticationMethod.providedBy(authenticator):
+            raise ValueError(
+                "authenticator must provide IWampAuthentication"
+            )
+        method = authenticator.wamp_method_name
+        # XXX check method isinstance unicode?
+        if method in self._authenticators:
+            raise ValueError(
+                "Already have an authenticator for '{}'".format(method)
+            )
+        self._authenticators[method] = authenticator
+
+    def remove_method(self, name):
+        """
+        Remove a previously added authentication method.
+
+        :param name str: the name of the authentication method
+        (e.g. "anonymous", "cryptosign", ..)
+
+        """
+        try:
+            del self._authenticators[name]
+        except KeyError:
+            raise ValueError(
+                "Can't find authentication method '{}'".format(name)
+            )
 
     def join_session(self, session):
         """
@@ -878,30 +918,16 @@ class WampAuthenticator(object):
 
     def on_challenge(self, session, challenge):
         """
-        hook called by Session when a challenge is received
+        hook called by Session when a challenge is received; forwards the
+        challenge to the correct authenticator
         """
         try:
             return self._authenticators[challenge.method].on_challenge(session, challenge)
         except KeyError:
-            raise Exception(
+            # XXX should be a WAMP protocol error?
+            raise RuntimeError(
                 "Got on_challenge for unknown authenticator '{}'".format(challenge.method)
             )
-
-    def add_method(self, authenticator):
-        """
-        :param authenticator: an object implementing IWampAuthenticationMethod
-        """
-        if not IWampAuthenticationMethod.providedBy(authenticator):
-            raise ValueError(
-                "authenticator must provide IWampAuthentication"
-            )
-        method = authenticator.wamp_method_name
-        # XXX check method isinstance unicode?
-        if method in self._authenticators:
-            raise ValueError(
-                "Already have an authenticator for '{}'".format(method)
-            )
-        self._authenticators[method] = authenticator
 
 
 # new API
