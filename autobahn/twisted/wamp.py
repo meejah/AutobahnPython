@@ -702,6 +702,27 @@ class IWampAuthenticationMethod(Interface):
 
 
 @implementer(IWampAuthenticationMethod)
+class AnonymousAuthenticator(object):
+    """
+    Implments WAMP-Anonymous for use as a Session authenticator
+    """
+
+    wamp_method_name = u"anonymous"
+
+    @classmethod
+    def from_config(cls, config):
+        assert config.get(u'name', None) == cls.wamp_method_name
+        return cls()
+
+    def get_authextra(self):
+        r = dict()
+        return r
+
+    def on_challenge(self, session, challenge):
+        raise RuntimeError("Received challenge for anonymous authentication")
+
+
+@implementer(IWampAuthenticationMethod)
 class CryptoSignAuthenticator(object):
     """
     Implments WAMP-CryptoSign for use as a Session authenticator
@@ -790,6 +811,7 @@ def authenticator_from_config(config):
             raise ValueError("method config requires '{}'".format(key))
     name = config.get(u'name')
     name_to_authenticator = {
+        u'anonymous': AnonymousAuthenticator,
         u'wampcra': ChallengeResponseAuthenticator,
         u'cryptosign': CryptoSignAuthenticator,
     }
