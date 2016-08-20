@@ -870,7 +870,10 @@ class WampAuthenticator(object):
             authid=config.get(u'authid', None),
         )
         for method_cfg in config['methods']:
-            auth.add_method(authenticator_from_config(method_cfg))
+            if IWampAuthenticationMethod.providedBy(method_cfg):
+                auth.add_method(method_cfg)
+            else:
+                auth.add_method(authenticator_from_config(method_cfg))
         return auth
 
     def __init__(self, realm, authid=None):
