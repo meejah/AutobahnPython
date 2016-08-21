@@ -1017,9 +1017,7 @@ class Session(ApplicationSession):
     @inlineCallbacks
     def onConnect(self):
         """
-        Do not override; not part of the public API. Instead override
-        :meth:`autobahn.wamp.interfaces.Session.configure_authentication`
-        or call set_auth_config()
+        Do not override; not part of the public API.
         """
         cfg = yield maybeDeferred(self.configure_authentication)
         self._authenticator = None
@@ -1034,6 +1032,8 @@ class Session(ApplicationSession):
                     " or dict or None"
                 )
             yield self._authenticator.join_session(self)
+
+        yield maybeDeferred(self.on_connect)
         return
 
     def onLeave(self, details):
@@ -1042,11 +1042,16 @@ class Session(ApplicationSession):
     def onDisconnect(self):
         return self.on_disconnect()
 
+    # this is the public API that you can override if need-be:
+
     def on_join(self, details):
         pass
 
     def on_leave(self, details):
         self.disconnect()
+
+    def on_connect(self):
+        pass
 
     def on_disconnect(self):
         pass
