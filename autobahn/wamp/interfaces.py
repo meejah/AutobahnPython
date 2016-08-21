@@ -236,12 +236,15 @@ class ITransportHandler(object):
     @abc.abstractmethod
     def on_message(self, message):
         """
-        Callback fired when a WAMP message was received. May run asynchronously. The callback
-        should return or fire the returned deferred/future when it's done processing the message.
-        In particular, an implementation of this callback must not access the message afterwards.
+        Callback fired when a WAMP message was received.  May run
+        asynchronously.  The callback should return or fire the
+        returned deferred/future when it's done processing the
+        message.  In particular, an implementation of this callback
+        must not access the message afterwards.
 
-        :param message: An instance that implements :class:`autobahn.wamp.interfaces.IMessage`
-        :type message: obj
+        :param message: An instance that implements
+            :class:`autobahn.wamp.interfaces.IMessage`
+        :type message: autobahn.wamp.interfaces.IMessage
         """
 
     @abc.abstractmethod
@@ -282,7 +285,6 @@ class ISession(object):
         """
         
     def join(self, realm):
-
         """
         Attach the session to the given realm. A session is open as soon as it is attached to a realm.
         """
