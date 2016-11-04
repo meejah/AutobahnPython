@@ -382,7 +382,10 @@ class Component(ObservableMixin):
 
         self._entry = main
 
-        # short-cuts for adding these immediately after...just confusing?
+        # basically these kwargs are just short-cuts for adding these
+        # immediately...is this just confusing? should we just
+        # encourage people to use Component.on('join') directly
+        # instead?
         if on_join:
             self.on('join', on_join)
 
