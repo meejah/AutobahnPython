@@ -231,10 +231,6 @@ def _create_transport_endpoint(reactor, endpoint_config):
     return endpoint
 
 
-def run(reactor, component_or_components):
-    pass
-
-
 class Component(component.Component):
     """
     A component establishes a transport and attached a session
@@ -383,7 +379,12 @@ class Component(component.Component):
 
 
 def _run(reactor, components):
-    log = txaio.make_logger()
+    """
+    Internal helper. Use "run" method.
+
+    This is called by react() so any errors coming out of this should
+    be handled properly. Logging will already be started.
+    """
     # let user pass a single component to run, too
     # XXX probably want IComponent? only demand it, here and below?
     if isinstance(components, Component):
@@ -402,34 +403,29 @@ def _run(reactor, components):
                 'item of type {0}'.format(type(c))
             )
 
+    # validation complete; proceed with startup
     log = txaio.make_logger()
 
-    def component_success(c, arg):
-        log.debug("Component {c} successfully completed: {arg}", c=c, arg=arg)
+    def component_success(comp, arg):
+        log.debug("Component '{c}' successfully completed: {arg}", c=comp, arg=arg)
         return arg
 
-    def component_failure(f):
-        log.error("Component error: {msg}", msg=txaio.failure_message(f))
+    def component_failure(comp, f):
+        log.error("Component '{c}' error: {msg}", c=comp, msg=txaio.failure_message(f))
         log.debug("Component error: {tb}", tb=txaio.failure_format_traceback(f))
         return None
 
-    def component_success(c, arg):
-        log.info("Component {c} successfully completed {arg}", c=c, arg=arg)
-        return arg
-
-    def component_failure(f):
-        log.error("Component error: {msg}", msg=txaio.failure_format_message(f))
-        log.debug("Component error: {tb}", tb=txaio.failure_format_traceback(f))
-        return arg
-
     # all components are started in parallel
     dl = []
-    for c in components:
-        # a component can be of type MAIN or SETUP
-        d = c.start(reactor)
-        txaio.add_callbacks(d, partial(component_success, c), component_failure)
+    for comp in components:
+        d = comp.start(reactor)
+        txaio.add_callbacks(
+            d,
+            partial(component_success, comp),
+            partial(component_failure, comp),
+        )
         dl.append(d)
-    d = txaio.gather(dl, consume_exceptions=False)
+    all_done = txaio.gather(dl, consume_exceptions=False)
 
     def all_done(arg):
         log.debug("All components ended; stopping reactor")
@@ -437,7 +433,6 @@ def _run(reactor, components):
             reactor.stop()
         except ReactorNotRunning:
             pass
-
     txaio.add_callbacks(d, all_done, all_done)
 
     def success(arg):
@@ -446,14 +441,31 @@ def _run(reactor, components):
     def failure(arg):
         log.info("fail")
 
-    txaio.add_callbacks(d, success, failure)
-    return d
+    txaio.add_callbacks(all_done, success, failure)
+    return all_done
 
 
 def run(components, log_level='info'):
+    """
+    High-level API to run a series of components.
+
+    This will only return once all the components have stopped
+    (including, possibly, after all re-connections have failed if you
+    have re-connections enabled). Under the hood, this calls
+    :meth:`twisted.internet.reactor.run` -- if you wish to manage the
+    reactor loop yourself, use the
+    :meth:`autobahn.twisted.component.Component.start` method to start
+    each component yourself.
+
+    :param components: the Component(s) you wish to run
+    :type components: Component or list of Components
+
+    :param log_level: a valid log-level (or None to avoid calling start_logging)
+    :type log_level: string
+    """
     # only for Twisted > 12
     from twisted.internet.task import react
 
     if log_level is not None:
         txaio.start_logging(level=log_level)
-    react(_run, [components])
+    react(_run, (components, ))
