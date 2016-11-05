@@ -37,7 +37,6 @@ from autobahn.util import ObservableMixin
 from autobahn.websocket.util import parse_url
 from autobahn.wamp.types import ComponentConfig
 from autobahn.wamp.exception import ApplicationError
-from autobahn.wamp.exception import SessionNotReady, ApplicationError
 
 __all__ = ('Connection')
 
@@ -299,7 +298,7 @@ def connect_to(reactor, transport_config, session_factory=None):
     :param transport_config: a dict containing the following keys:
                 - ``type`` (optional): ``websocket`` (default) or ``rawsocket``
                 - ``url``: the WAMP URL
-                - ``endpoint`` (optional, derived from URL if not provided): 
+                - ``endpoint`` (optional, derived from URL if not provided):
                     - ``type``: "tcp" or "unix"
                     - ``host``, ``port``: only for TCP
                     - ``path``: only for unix

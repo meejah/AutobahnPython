@@ -425,24 +425,26 @@ def _run(reactor, components):
             partial(component_failure, comp),
         )
         dl.append(d)
-    all_done = txaio.gather(dl, consume_exceptions=False)
+    done_d = txaio.gather(dl, consume_exceptions=False)
 
     def all_done(arg):
         log.debug("All components ended; stopping reactor")
+        if isinstance(arg, Failure):
+            log.error("Something went wrong: {log_failure}", failure=arg)
         try:
             reactor.stop()
         except ReactorNotRunning:
             pass
-    txaio.add_callbacks(d, all_done, all_done)
+    txaio.add_callbacks(done_d, all_done, all_done)
 
     def success(arg):
         log.info("success!" + str(arg))
 
     def failure(arg):
-        log.info("fail")
+        log.failure("fail {log_failure}", failure=arg)
 
-    txaio.add_callbacks(all_done, success, failure)
-    return all_done
+    txaio.add_callbacks(done_d, success, failure)
+    return done_d
 
 
 def run(components, log_level='info'):
