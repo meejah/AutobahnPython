@@ -30,7 +30,8 @@ from __future__ import absolute_import, print_function
 import itertools
 from functools import partial
 
-from twisted.internet.defer import inlineCallbacks  # XXX FIXME
+from twisted.internet.defer import inlineCallbacks  # XXX FIXME?
+from twisted.python.failure import Failure
 from twisted.internet.interfaces import IStreamClientEndpoint
 from twisted.internet.endpoints import UNIXClientEndpoint
 from twisted.internet.endpoints import TCP4ClientEndpoint
