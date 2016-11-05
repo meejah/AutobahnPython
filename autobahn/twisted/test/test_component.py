@@ -36,6 +36,7 @@ if os.environ.get('USE_TWISTED', False):
 
         def test_invalid_key(self):
             with self.assertRaises(ValueError) as ctx:
+                # XXX can probably get rid of main= thing?
                 Component(
                     main=lambda r, s: None,
                     transports=dict(

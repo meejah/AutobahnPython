@@ -119,7 +119,7 @@ def _create_transport(index, transport, check_native_endpoint=None):
                 "'{}' is not a valid configuration item".format(k)
             )
 
-    valid_transport_keys = ['type', 'url', 'endpoint']
+    valid_transport_keys = ['type', 'url', 'endpoint', 'serializer', 'serializers']
     for k in transport.keys():
         if k not in valid_transport_keys:
             raise ValueError(
@@ -400,7 +400,7 @@ class Component(ObservableMixin):
             transports = u'ws://127.0.0.1:8080/ws'
 
         # allows to provide an URL instead of a list of transports
-        if type(transports) == six.text_type:
+        if isinstance(transports, (six.text_type, str)):
             url = transports
             # 'endpoint' will get filled in by parsing the 'url'
             transport = {
