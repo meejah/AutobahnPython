@@ -36,7 +36,7 @@ import txaio
 from autobahn.util import ObservableMixin
 from autobahn.websocket.util import parse_url
 from autobahn.wamp.types import ComponentConfig
-from autobahn.wamp.exception import ApplicationError
+
 
 __all__ = ('Connection')
 

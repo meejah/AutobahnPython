@@ -505,6 +505,7 @@ class ApplicationSession(BaseSession):
                 def success(arg):
                     # XXX also: handle async
                     d = self.fire('leave', self, details)
+
                     def return_arg(_):
                         return arg
 
