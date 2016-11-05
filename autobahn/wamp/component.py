@@ -119,13 +119,6 @@ def _create_transport(index, transport, check_native_endpoint=None):
                 "'{}' is not a valid configuration item".format(k)
             )
 
-    valid_transport_keys = ['type', 'url', 'endpoint', 'serializer', 'serializers']
-    for k in transport.keys():
-        if k not in valid_transport_keys:
-            raise ValueError(
-                "'{}' is not a valid configuration item".format(k)
-            )
-
     kind = 'websocket'
     if 'type' in transport:
         if transport['type'] not in ['websocket', 'rawsocket']:
