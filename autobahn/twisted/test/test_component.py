@@ -28,9 +28,99 @@ from __future__ import absolute_import
 
 import os
 import unittest
+from mock import Mock, patch
 
 if os.environ.get('USE_TWISTED', False):
     from autobahn.twisted.component import Component
+    from zope.interface import directlyProvides
+    from twisted.internet.interfaces import IStreamClientEndpoint
+    from twisted.internet.defer import inlineCallbacks, succeed
+
+    class ConnectionTests(unittest.TestCase):
+
+        def setUp(self):
+            pass
+
+        @patch('autobahn.twisted.component.sleep', return_value=succeed(None))
+        @inlineCallbacks
+        def test_successful_connect(self, fake_sleep):
+            endpoint = Mock()
+            proto = Mock()
+            joins = []
+
+            def joined(session, details):
+                joins.append((session, details))
+                return session.leave()
+            directlyProvides(endpoint, IStreamClientEndpoint)
+            component = Component(
+                transports={
+                    "type": "websocket",
+                    "url": "ws://127.0.0.1/ws",
+                    "endpoint": endpoint,
+                }
+            )
+            component.on('join', joined)
+            reactor = Mock()
+
+            def connect(factory, **kw):
+                print("connect", factory, kw)
+                proto = factory.buildProtocol('boom')
+                proto.makeConnection(Mock())
+                #proto.peer = Mock()
+
+                from autobahn.websocket.protocol import WebSocketProtocol
+                from base64 import b64encode
+                from hashlib import sha1
+                key = proto.websocket_key + WebSocketProtocol._WS_MAGIC
+                proto.data = (
+                    b"HTTP/1.1 101 Switching Protocols\x0d\x0a"
+                    b"Upgrade: websocket\x0d\x0a"
+                    b"Connection: upgrade\x0d\x0a"
+                    b"Sec-Websocket-Protocol: wamp.2.json\x0d\x0a"
+                    b"Sec-Websocket-Accept: " + b64encode(sha1(key).digest()) + b"\x0d\x0a\x0d\x0a"
+                )
+                proto.processHandshake()
+                print("DING", proto.state)
+
+                from autobahn.wamp import role
+                features = role.RoleBrokerFeatures(
+                    publisher_identification=True,
+                    pattern_based_subscription=True,
+                    session_meta_api=True,
+                    subscription_meta_api=True,
+                    subscriber_blackwhite_listing=True,
+                    publisher_exclusion=True,
+                    subscription_revocation=True,
+                    payload_transparency=True,
+                    payload_encryption_cryptobox=True,
+                )
+
+                from autobahn.wamp import message, serializer
+                msg = message.Welcome(123456, dict(broker=features), realm=u'realm')
+                serializer = serializer.JsonSerializer()
+                data, is_binary = serializer.serialize(msg)
+                print("DATA", is_binary)
+                #proto.dataReceived(data)
+                proto.onMessage(data, is_binary)
+
+#                proto.dataReceived(b'asdfasdf')
+                print("proto", proto, proto.state)
+
+                msg = message.Goodbye()
+                proto.onMessage(*serializer.serialize(msg))
+                proto.onClose(True, 100, "some old reason")
+
+                return succeed(proto)
+            endpoint.connect = connect
+
+            print("connecting")
+            d = component.start()#reactor)
+            print("XXX", d)
+            x = yield d
+            print("OHAI!", x)
+            self.assertTrue(len(joins), 1)
+            print("JOINS", joins)
+
 
     class InvalidTransportConfigs(unittest.TestCase):
 

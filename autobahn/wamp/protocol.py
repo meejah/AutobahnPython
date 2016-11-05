@@ -440,6 +440,7 @@ class ApplicationSession(BaseSession):
         Implements :func:`autobahn.wamp.interfaces.ITransportHandler.onMessage`
         """
 
+        print("got message", msg, self._session_id)
         if self._session_id is None:
 
             # the first message must be WELCOME, ABORT or CHALLENGE ..
@@ -466,7 +467,9 @@ class ApplicationSession(BaseSession):
                 # including self.leave() -- works properly. Besides,
                 # there's "ready" that fires after 'join' and onJoin
                 # have all completed...
+                print("firing join", details)
                 d = self.fire('join', self, details)
+                print("fired", d)
                 # add a logging errback first, which will ignore any
                 # errors from fire()
                 txaio.add_callbacks(
@@ -561,6 +564,7 @@ class ApplicationSession(BaseSession):
         else:
             # self._session_id != None (aka "session established")
             if isinstance(msg, message.Goodbye):
+                print("GOT GOODBYE")
                 if not self._goodbye_sent:
                     # the peer wants to close: send GOODBYE reply
                     reply = message.Goodbye()

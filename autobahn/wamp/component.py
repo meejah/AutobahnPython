@@ -124,6 +124,8 @@ def _create_transport(index, transport, check_native_endpoint=None):
         if transport['type'] not in ['websocket', 'rawsocket']:
             raise ValueError('Invalid transport type {}'.format(transport['type']))
         kind = transport['type']
+    else:
+        transport['type'] = 'websocket'
 
     if kind == 'websocket':
         for key in ['url']:
@@ -443,12 +445,13 @@ class Component(ObservableMixin):
         )
 
         done = txaio.create_future()
-
+        print("DONE", done)
         # factory for ISession objects
         def create_session():
             cfg = ComponentConfig(self._realm, self._extra)
             try:
                 session = self.session_factory(cfg)
+                print("SESSION", session)
             except Exception as e:
                 # couldn't instantiate session calls, which is fatal.
                 # let the reconnection logic deal with that
@@ -467,6 +470,7 @@ class Component(ObservableMixin):
                 # (e.g. no_such_realm), an on_leave can happen without
                 # an on_join before
                 def on_leave(session, details):
+                    print("asdlkasldkfja LEAVE", session, details)
                     self.log.info("session on_leave: {details}", details=details)
                     if self._entry:
                         txaio.resolve(done, None)
@@ -494,6 +498,7 @@ class Component(ObservableMixin):
                 # had a "main" procedure, we could have already
                 # resolve()'d our "done" future
                 def on_disconnect(session, was_clean):
+                    print("ON DISCONNECT", session, was_clean)
                     self.log.info("session on_disconnect: {was_clean}", was_clean=was_clean)
                     if not txaio.is_called(done):
                         if was_clean:
@@ -509,6 +514,7 @@ class Component(ObservableMixin):
 
         transport.connect_attempts += 1
         d = self._connect_transport(reactor, transport, create_session)
+        print("DD", d)
 
         def on_connect_sucess(proto):
             # if e.g. an SSL handshake fails, we will have
@@ -527,10 +533,13 @@ class Component(ObservableMixin):
             proto.connectionLost = lost
 
         def on_connect_failure(err):
+            print("fail", err)
             transport.connect_failures += 1
             # failed to establish a connection in the first place
             done.errback(err)
 
-        txaio.add_callbacks(d, on_connect_sucess, on_connect_failure)
+        txaio.add_callbacks(d, on_connect_sucess, None)
+        txaio.add_callbacks(d, None, on_connect_failure)
 
+        print("returning", done)
         return done
