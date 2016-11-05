@@ -203,7 +203,10 @@ class WampWebSocketClientProtocol(WampWebSocketProtocol):
         """
         Callback from :func:`autobahn.websocket.interfaces.IWebSocketChannel.onConnect`
         """
+#        import traceback; traceback.print_stack()
+        print("RESPONSE", response)
         if response.protocol not in self.factory.protocols:
+            print("RES", response.protocol)
             if self.STRICT_PROTOCOL_NEGOTIATION:
                 raise Exception(u'The server does not speak any of the WebSocket subprotocols {} we requested.'.format(u', '.join(self.factory.protocols)))
             else:
