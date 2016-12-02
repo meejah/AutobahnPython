@@ -91,6 +91,22 @@
                         }
                     }
                 }
+            ],
+            "options": {
+                "pythonpath": ["../../twisted/wamp/work/newapi/"]
+            },
+            "components": [
+                {
+                    "type": "function",
+                    "realm": "crossbardemo",
+                    "role": "anonymous",
+                    "callbacks": {
+                        "join": "func_component.on_join",
+                        "leave": "func_component.on_leave",
+                        "connect": "func_component.on_connect",
+                        "disconnect": "func_component.on_disconnect"
+                    }
+                }
             ]
         }
     ]
