@@ -33,6 +33,8 @@ from mock import Mock, patch
 if os.environ.get('USE_TWISTED', False):
     from autobahn.twisted.component import Component
     from zope.interface import directlyProvides
+    from autobahn.wamp.message import Welcome, Goodbye
+    from autobahn.wamp.serializer import JsonSerializer
     from twisted.internet.interfaces import IStreamClientEndpoint
     from twisted.internet.defer import inlineCallbacks, succeed
 
@@ -95,9 +97,8 @@ if os.environ.get('USE_TWISTED', False):
                     payload_encryption_cryptobox=True,
                 )
 
-                from autobahn.wamp import message, serializer
-                msg = message.Welcome(123456, dict(broker=features), realm=u'realm')
-                serializer = serializer.JsonSerializer()
+                msg = Welcome(123456, dict(broker=features), realm=u'realm')
+                serializer = JsonSerializer()
                 data, is_binary = serializer.serialize(msg)
                 print("DATA", is_binary)
                 #proto.dataReceived(data)
@@ -106,7 +107,7 @@ if os.environ.get('USE_TWISTED', False):
 #                proto.dataReceived(b'asdfasdf')
                 print("proto", proto, proto.state)
 
-                msg = message.Goodbye()
+                msg = Goodbye()
                 proto.onMessage(*serializer.serialize(msg))
                 proto.onClose(True, 100, "some old reason")
 
