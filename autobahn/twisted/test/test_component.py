@@ -65,7 +65,6 @@ if os.environ.get('USE_TWISTED', False):
             reactor = Mock()
 
             def connect(factory, **kw):
-                print("connect", factory, kw)
                 proto = factory.buildProtocol('boom')
                 proto.makeConnection(Mock())
                 #proto.peer = Mock()
@@ -82,7 +81,6 @@ if os.environ.get('USE_TWISTED', False):
                     b"Sec-Websocket-Accept: " + b64encode(sha1(key).digest()) + b"\x0d\x0a\x0d\x0a"
                 )
                 proto.processHandshake()
-                print("DING", proto.state)
 
                 from autobahn.wamp import role
                 features = role.RoleBrokerFeatures(
@@ -100,12 +98,10 @@ if os.environ.get('USE_TWISTED', False):
                 msg = Welcome(123456, dict(broker=features), realm=u'realm')
                 serializer = JsonSerializer()
                 data, is_binary = serializer.serialize(msg)
-                print("DATA", is_binary)
                 #proto.dataReceived(data)
                 proto.onMessage(data, is_binary)
 
 #                proto.dataReceived(b'asdfasdf')
-                print("proto", proto, proto.state)
 
                 msg = Goodbye()
                 proto.onMessage(*serializer.serialize(msg))
@@ -114,13 +110,9 @@ if os.environ.get('USE_TWISTED', False):
                 return succeed(proto)
             endpoint.connect = connect
 
-            print("connecting")
             d = component.start()#reactor)
-            print("XXX", d)
             x = yield d
-            print("OHAI!", x)
             self.assertTrue(len(joins), 1)
-            print("JOINS", joins)
 
 
     class InvalidTransportConfigs(unittest.TestCase):

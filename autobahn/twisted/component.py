@@ -322,9 +322,7 @@ class Component(component.Component):
                     transport_idx=transport.idx,
                     transport_delay=delay,
                 )
-                print("transport", transport, delay)
                 yield sleep(delay)
-                print("transport", transport, delay)
                 try:
                     transport.connect_attempts += 1
                     yield self._connect_once(reactor, transport)
