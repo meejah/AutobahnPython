@@ -332,13 +332,13 @@ class Component(ObservableMixin):
     def __init__(self, main=None, transports=None, config=None, realm=u'default',
                  on_join=None, on_leave=None, on_connect=None, on_disconnect=None):
         """
-        :param main: A callable that runs user code for the component. The
-            component will be started with a "main-like"
-            procedure. When a transport has been connected and a
-            session has been established and joined a realm, the user
-            code will be run until it finishes which signals that the
-            component has run to completion. In this case, it usually
-            doesn't make sense to use the ``on_*`` kwargs
+        :param main: After a transport has been connected and a session
+            has been established and joined to a realm, this (async)
+            procedure will be run until it finishes -- which signals that
+            the component has run to completion. In this case, it usually
+            doesn't make sense to use the ``on_*`` kwargs. If you do not
+            pass a main() procedure, the session will not be closed
+            (unless you arrange for .leave() to be called).
 
         :type main: callable taking 2 args: reactor, ISession
 
