@@ -29,9 +29,10 @@ from autobahn.twisted.wamp import Session
 # "config-no-tls.json" or "config-tls.json"
 
 
-class Foo(Session):
+class BadSession(Session):
     def __init__(self, *args, **kw):
         1 / 0
+
 
 @inlineCallbacks
 def setup(reactor, session):
@@ -117,6 +118,6 @@ if __name__ == '__main__':
     #component = Component(setup=setup, transports=transports, realm=u'crossbardemo')
 
     # can add this confirm logging of more error-cases
-    #component.session_factory = Foo
+    #component.session_factory = BadSession
     txaio.start_logging(level='info')
     run(component)
