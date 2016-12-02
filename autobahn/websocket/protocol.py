@@ -770,7 +770,6 @@ class WebSocketProtocol(object):
 
         elif self.state == WebSocketProtocol.STATE_CLOSED:
             # The peer initiated a closing handshake but dropped the TCP immediately.
-            print("ALREADYCLOSED")
             self.wasClean = False
 
         else:
@@ -876,8 +875,6 @@ class WebSocketProtocol(object):
 
             if self.failByDrop:
                 # brutally drop the TCP connection
-                print("ALWAYS FAIL")
-#                import traceback; traceback.print_stack()
                 self.wasClean = False
                 self.wasNotCleanReason = u'I failed the WebSocket connection by dropping the TCP connection'
                 self.dropConnection(abort=True)
@@ -905,7 +902,6 @@ class WebSocketProtocol(object):
         """
         self.log.debug("Protocol violation: {reason}", reason=reason)
 
-        print("REASON", reason)
         self._fail_connection(WebSocketProtocol.CLOSE_STATUS_CODE_PROTOCOL_ERROR, reason)
 
         if self.failByDrop:
@@ -1176,7 +1172,6 @@ class WebSocketProtocol(object):
         This is called by network framework upon receiving data on transport
         connection.
         """
-        print("DATAaaaaaaa", data)
         if self.state == WebSocketProtocol.STATE_OPEN:
             self.trafficStats.incomingOctetsWireLevel += len(data)
         elif self.state == WebSocketProtocol.STATE_CONNECTING or self.state == WebSocketProtocol.STATE_PROXY_CONNECTING:
@@ -1340,7 +1335,6 @@ class WebSocketProtocol(object):
 
             # need minimum of 2 octets to for new frame
             #
-            print("DDDDD", self.data)
             if buffered_len >= 2:
 
                 # FIN, RSV, OPCODE
@@ -3775,13 +3769,11 @@ class WebSocketClientProtocol(WebSocketProtocol):
                                               self.websocket_version,
                                               self.websocket_protocol_in_use,
                                               self.websocket_extensions_in_use)
-                print("XXX  -> ", self.websocket_protocol_in_use)
                 self._onConnect(response)
 
             except Exception as e:
                 # immediately close the WS connection
                 #
-                print("EEE", e)
                 self._fail_connection(1000, u'{}'.format(e))
             else:
                 # fire handler on derived class
