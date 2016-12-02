@@ -317,6 +317,7 @@ class ApplicationSession(BaseSession):
         Implements :func:`autobahn.wamp.interfaces.ITransportHandler.onOpen`
         """
         self._transport = transport
+        # XXX hmmm, this makes 'connect' event different from onConnect ...
         d = self.fire('connect', self, transport)
         txaio.add_callbacks(
             d, None,
