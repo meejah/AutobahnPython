@@ -467,6 +467,9 @@ def run(components, log_level='info'):
     :type log_level: string
     """
     # only for Twisted > 12
+    # ...so this isn't in all Twisted versions we test against -- need
+    # to do "something else" if we can't import .. :/ (or drop some
+    # support)
     from twisted.internet.task import react
 
     if log_level is not None:
