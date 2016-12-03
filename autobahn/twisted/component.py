@@ -414,9 +414,17 @@ def _run(reactor, components):
     def component_failure(comp, f):
         log.error("Component '{c}' error: {msg}", c=comp, msg=txaio.failure_message(f))
         log.debug("Component error: {tb}", tb=txaio.failure_format_traceback(f))
+        # double-check: is a component-failure still fatal to the
+        # startup process (because we passed consume_exception=False
+        # to gather() below?)
         return None
 
     # all components are started in parallel
+
+    # XXX maybe we want to make ^ an option? i.e. what if one
+    # component depends on another -- an easy way to make that work is
+    # to start components in the order passed (and if you know there's
+    # no dependencies you pass "parallel_start=True" or something
     dl = []
     for comp in components:
         d = comp.start(reactor)
@@ -472,6 +480,9 @@ def run(components, log_level='info'):
     # support)
     from twisted.internet.task import react
 
+    # actually, should we even let people "not start" the logging? I'm
+    # not sure that's wise... (double-check: if they already called
+    # txaio.start_logging() what happens if we call it again?)
     if log_level is not None:
         txaio.start_logging(level=log_level)
     react(_run, (components, ))
