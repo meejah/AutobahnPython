@@ -37,6 +37,8 @@ if os.environ.get('USE_TWISTED', False):
     from autobahn.wamp.serializer import JsonSerializer
     from twisted.internet.interfaces import IStreamClientEndpoint
     from twisted.internet.defer import inlineCallbacks, succeed
+    from twisted.internet.task import Clock
+    from txaio.testutil import replace_loop
 
     class ConnectionTests(unittest.TestCase):
 
@@ -47,7 +49,6 @@ if os.environ.get('USE_TWISTED', False):
         @inlineCallbacks
         def test_successful_connect(self, fake_sleep):
             endpoint = Mock()
-            proto = Mock()
             joins = []
 
             def joined(session, details):
@@ -62,12 +63,10 @@ if os.environ.get('USE_TWISTED', False):
                 }
             )
             component.on('join', joined)
-            reactor = Mock()
 
             def connect(factory, **kw):
                 proto = factory.buildProtocol('boom')
                 proto.makeConnection(Mock())
-                #proto.peer = Mock()
 
                 from autobahn.websocket.protocol import WebSocketProtocol
                 from base64 import b64encode
@@ -98,10 +97,7 @@ if os.environ.get('USE_TWISTED', False):
                 msg = Welcome(123456, dict(broker=features), realm=u'realm')
                 serializer = JsonSerializer()
                 data, is_binary = serializer.serialize(msg)
-                #proto.dataReceived(data)
                 proto.onMessage(data, is_binary)
-
-#                proto.dataReceived(b'asdfasdf')
 
                 msg = Goodbye()
                 proto.onMessage(*serializer.serialize(msg))
@@ -110,18 +106,22 @@ if os.environ.get('USE_TWISTED', False):
                 return succeed(proto)
             endpoint.connect = connect
 
-            d = component.start()#reactor)
-            x = yield d
-            self.assertTrue(len(joins), 1)
-
+            # XXX it would actually be nicer if we *could* support
+            # passing a reactor in here, but the _batched_timer =
+            # make_batched_timer() stuff (slash txaio in general)
+            # makes this "hard".
+            reactor = Clock()
+            with replace_loop(reactor):
+                yield component.start()
+                self.assertTrue(len(joins), 1)
+                # make sure we fire all our time-outs
+                reactor.advance(3600)
 
     class InvalidTransportConfigs(unittest.TestCase):
 
         def test_invalid_key(self):
             with self.assertRaises(ValueError) as ctx:
-                # XXX can probably get rid of main= thing?
                 Component(
-                    main=lambda r, s: None,
                     transports=dict(
                         foo='bar',  # totally invalid key
                     ),
@@ -131,7 +131,6 @@ if os.environ.get('USE_TWISTED', False):
         def test_invalid_key_transport_list(self):
             with self.assertRaises(ValueError) as ctx:
                 Component(
-                    main=lambda r, s: None,
                     transports=[
                         dict(type='websocket', url='ws://127.0.0.1/ws'),
                         dict(foo='bar'),  # totally invalid key
@@ -142,7 +141,6 @@ if os.environ.get('USE_TWISTED', False):
         def test_invalid_serializer_key(self):
             with self.assertRaises(ValueError) as ctx:
                 Component(
-                    main=lambda r, s: None,
                     transports=[
                         {
                             "url": "ws://127.0.0.1/ws",
@@ -155,7 +153,6 @@ if os.environ.get('USE_TWISTED', False):
         def test_invalid_serializer(self):
             with self.assertRaises(ValueError) as ctx:
                 Component(
-                    main=lambda r, s: None,
                     transports=[
                         {
                             "url": "ws://127.0.0.1/ws",
@@ -168,7 +165,6 @@ if os.environ.get('USE_TWISTED', False):
         def test_invalid_serializer_type_0(self):
             with self.assertRaises(ValueError) as ctx:
                 Component(
-                    main=lambda r, s: None,
                     transports=[
                         {
                             "url": "ws://127.0.0.1/ws",
@@ -181,7 +177,6 @@ if os.environ.get('USE_TWISTED', False):
         def test_invalid_serializer_type_1(self):
             with self.assertRaises(ValueError) as ctx:
                 Component(
-                    main=lambda r, s: None,
                     transports=[
                         {
                             "url": "ws://127.0.0.1/ws",
@@ -194,7 +189,6 @@ if os.environ.get('USE_TWISTED', False):
         def test_invalid_type_key(self):
             with self.assertRaises(ValueError) as ctx:
                 Component(
-                    main=lambda r, s: None,
                     transports=[
                         {
                             "type": "bad",
@@ -206,7 +200,6 @@ if os.environ.get('USE_TWISTED', False):
         def test_invalid_type(self):
             with self.assertRaises(ValueError) as ctx:
                 Component(
-                    main=lambda r, s: None,
                     transports=[
                         "foo"
                     ]
@@ -216,7 +209,6 @@ if os.environ.get('USE_TWISTED', False):
         def test_no_url(self):
             with self.assertRaises(ValueError) as ctx:
                 Component(
-                    main=lambda r, s: None,
                     transports=[
                         {
                             "type": "websocket",
