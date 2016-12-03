@@ -233,6 +233,9 @@ class _Transport(object):
                 "'rawsocket' transport requires exactly one serializer"
             )
 
+        # note there's also twisted.application.internet.ClientService
+        # (new in 16.1.0) to "maintain a single outgoing connection to
+        # a client endpoint"
         self.max_retries = max_retries
         self.max_retry_delay = max_retry_delay
         self.initial_retry_delay = initial_retry_delay
@@ -315,8 +318,9 @@ def connect_to(reactor, transport_config, session_factory=None):
     """
 
 
-# this could probably implement Twisted's IService if we wanted; or
-# via an adapter...
+# this could probably implement twisted.application.service.IService
+# if we wanted; or via an adapter...which just adds a startService()
+# and stopService() [latter can be async]
 
 class Component(ObservableMixin):
     """
@@ -329,8 +333,10 @@ class Component(ObservableMixin):
     The factory of the session we will instantiate.
     """
 
-    def __init__(self, main=None, transports=None, config=None, realm=u'default',
-                 on_join=None, on_leave=None, on_connect=None, on_disconnect=None):
+    # XXX: could pass 'convenience' params, if you prefer not calling Component.on('join', ..)
+    # on_join=None, on_leave=None, on_connect=None, on_disconnect=None):
+    # XXX: or provide these via @component.on_join etc?
+    def __init__(self, main=None, transports=None, config=None, realm=u'default'):
         """
         :param main: After a transport has been connected and a session
             has been established and joined to a realm, this (async)
@@ -382,13 +388,6 @@ class Component(ObservableMixin):
             raise RuntimeError('"main" must be a callable if given')
 
         self._entry = main
-
-        # basically these kwargs are just short-cuts for adding these
-        # immediately...is this just confusing? should we just
-        # encourage people to use Component.on('join') directly
-        # instead?
-        if on_join:
-            self.on('join', on_join)
 
         # use WAMP-over-WebSocket to localhost when no transport is specified at all
         if transports is None:
@@ -445,6 +444,7 @@ class Component(ObservableMixin):
         )
 
         done = txaio.create_future()
+
         # factory for ISession objects
         def create_session():
             cfg = ComponentConfig(self._realm, self._extra)
