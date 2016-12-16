@@ -377,6 +377,33 @@ class Component(component.Component):
         return self._session.leave()
 
 
+    # XXX some experimental APIs for decorator-based stuff
+
+    def on_join(self, fn):
+        """
+        A decorator as a shortcut for listening for on-join events.
+
+        For example::
+
+           @component.on_join
+           def joined(session, details):
+               print("Session {} joined: {}".format(session, details))
+        """
+        self.on('join', fn)
+
+    def on_leave(self, fn):
+        self.on('leave', fn)
+
+    def on_connect(self, fn):
+        self.on('connect', fn)
+
+    def on_disconnect(self, fn):
+        self.on('disconnect', fn)
+
+    def on_ready(self, fn):
+        self.on('ready', fn)
+
+
 def _run(reactor, components):
     """
     Internal helper. Use "run" method.
