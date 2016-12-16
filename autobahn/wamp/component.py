@@ -468,7 +468,10 @@ class Component(ObservableMixin):
                 # (e.g. no_such_realm), an on_leave can happen without
                 # an on_join before
                 def on_leave(session, details):
-                    self.log.info("session on_leave: {details}", details=details)
+                    self.log.info(
+                        "session leaving '{details.reason}'",
+                        details=details,
+                    )
                     if self._entry:
                         txaio.resolve(done, None)
                 session.on('leave', on_leave)
@@ -495,7 +498,10 @@ class Component(ObservableMixin):
                 # had a "main" procedure, we could have already
                 # resolve()'d our "done" future
                 def on_disconnect(session, was_clean):
-                    self.log.info("session on_disconnect: {was_clean}", was_clean=was_clean)
+                    self.log.debug(
+                        "session on_disconnect: was_clean={was_clean}",
+                        was_clean=was_clean,
+                    )
                     if not txaio.is_called(done):
                         if was_clean:
                             # eg the session has left the realm, and the transport was properly

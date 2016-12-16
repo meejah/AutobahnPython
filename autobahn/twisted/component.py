@@ -363,10 +363,8 @@ class Component(component.Component):
                         # stacktraces logged immediately at error
                         # level, e.g. SyntaxError?
                         self.log.debug(u'{tb}', tb=txaio.failure_format_traceback(f))
-                        raise
-                    # XXX if moving realm to transport, no_such_realm
-                    # is no longer automagically a 'fatal error'...
                 else:
+                    self.log.debug(u"Not reconnecting")
                     reconnect = False
             else:
                 # check if there is any transport left we can use
@@ -445,14 +443,6 @@ def _run(reactor, components):
         except ReactorNotRunning:
             pass
     txaio.add_callbacks(done_d, all_done, all_done)
-
-    def success(arg):
-        log.info("success!" + str(arg))
-
-    def failure(arg):
-        log.failure("fail {log_failure}", failure=arg)
-
-    txaio.add_callbacks(done_d, success, failure)
     return done_d
 
 
