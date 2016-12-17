@@ -336,7 +336,7 @@ class Component(ObservableMixin):
     # XXX: could pass 'convenience' params, if you prefer not calling Component.on('join', ..)
     # on_join=None, on_leave=None, on_connect=None, on_disconnect=None):
     # XXX: or provide these via @component.on_join etc?
-    def __init__(self, main=None, transports=None, config=None, realm=u'default'):
+    def __init__(self, main=None, transports=None, config=None, realm=u'default', extra=None):
         """
         :param main: After a transport has been connected and a session
             has been established and joined to a realm, this (async)
@@ -419,7 +419,7 @@ class Component(ObservableMixin):
             )
 
         self._realm = realm
-        self._extra = None  # XXX FIXME
+        self._extra = extra
 
     def _can_reconnect(self):
         # check if any of our transport has any reconnect attempt left
