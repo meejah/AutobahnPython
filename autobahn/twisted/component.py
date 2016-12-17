@@ -157,7 +157,7 @@ def _create_transport_factory(reactor, transport, session_factory):
 
     elif transport.type == 'rawsocket':
         # FIXME: forward RawSocket options
-        serializer = _create_transport_serializer(transport.serializer)
+        serializer = _create_transport_serializer(transport.serializers[0])
         return WampRawSocketClientFactory(session_factory, serializer=serializer)
 
     else:
@@ -338,8 +338,13 @@ class Component(component.Component):
                         if e.error in [u'wamp.error.no_such_realm']:
                             reconnect = False
                             self.log.error(u"Fatal error, not reconnecting")
+                            # The thinking here is that we really do
+                            # want to 'raise' (and thereby fail the
+                            # entire "start" / reconnect loop) because
+                            # if the realm isn't valid, we're "never"
+                            # going to succeed...
                             raise
-                        # self.log.error(u"{error}: {message}", error=e.error, message=e.message)
+                        self.log.error(u"{msg}", msg=e.error_message())
                     elif _is_ssl_error(e):
                         # Quoting pyOpenSSL docs: "Whenever
                         # [SSL.Error] is raised directly, it has a
