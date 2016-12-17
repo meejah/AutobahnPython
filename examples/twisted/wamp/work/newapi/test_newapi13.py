@@ -2,6 +2,9 @@ from autobahn.wamp import Api
 
 # create an API object to use the decorator style
 # register/subscribe WAMP actions
+
+# note: this isn't there -- could use decorator-style methods on
+# Component (e.g. @component.register(..) etc)
 api = Api()
 
 @api.register(u'com.example.add2')
@@ -14,11 +17,7 @@ def on_hello(msg, details=None):
     details.session.leave()
 
 @coroutine
-def component1(reactor, session):
-    """
-    A first component, which gets called "setup-like". When
-    it returns, this signals that the component is ready for work.
-    """
+def component1(session, details):
     # expose the API on the session
     yield session.expose(api)
 
@@ -38,8 +37,15 @@ if __name__ == '__main__':
 
     # Components wrap either a setup or main function and
     # can be configured with transports, authentication and so on.
+    comp1 = Component()
+    comp1.on('join', component1)
+
+    # note: might be worth adding 'on_join=' optional kwargs to
+    # Component so that you can do above definition "inline" in the
+    # list below (e.g. Component(on_join=component1)
+
     components = [
-        Component(setup=component1),
+        comp1,
         Component(main=component2)
     ]
 

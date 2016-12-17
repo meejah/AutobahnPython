@@ -5,6 +5,13 @@ from autobahn.twisted.wamp import Connection
 # A single session joins a first realm, leaves and joins another realm
 # all over the same, still running transport
 
+# (now, we can do this in an on_join:)
+# @component.on_join
+# @inlineCallback
+# def _(session, details):
+#     yield session.leave()
+#     yield session.join(u'another_realm')
+
 @coroutine
 def main(transport):
     session = ApplicationSession()

@@ -2,6 +2,12 @@ from twisted.internet.task import react
 from twisted.internet.defer import inlineCallbacks as coroutine
 from autobahn.twisted.wamp import Connection
 
+
+# this style is "mostly" broken. we put back the @session.on_*
+# stuff. Adding a "@component.register" would be straightforward as
+# well. But different style from this, so this example broken.
+
+
 session = ApplicationSession()
 
 @session.on_join

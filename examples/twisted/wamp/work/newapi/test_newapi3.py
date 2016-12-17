@@ -1,9 +1,9 @@
 from twisted.internet.task import react
 from twisted.internet.defer import inlineCallbacks as coroutine
-from autobahn.twisted.connection import Connection
+from autobahn.twisted.component import Component
 
 
-def main(reactor, connection):
+def main(reactor, component):
 
     @coroutine
     def on_join(session, details):
@@ -29,7 +29,7 @@ def main(reactor, connection):
             print("leaving ..")
             session.leave()
 
-    connection.on('join', on_join)
+    component.on('join', on_join)
 
 
 if __name__ == '__main__':
@@ -40,6 +40,7 @@ if __name__ == '__main__':
     transports = [
         {
             'type': 'rawsocket',
+            'url': 'ws://127.0.0.1:8080/ws',  # url is required now .. is that actually true?
             'serializer': 'msgpack',
             'endpoint': {
                 'type': 'unix',
@@ -56,7 +57,7 @@ if __name__ == '__main__':
             }
         }
     ]
-    connection = Connection(transports=transports)
-    connection.on('start', main)
+    component = Component(transports=transports, realm=u'crossbardemo')
+    component.on('start', main)
 
-    react(connection.start)
+    react(component.start)

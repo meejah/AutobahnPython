@@ -1,7 +1,7 @@
 from twisted.internet.task import react
 from twisted.internet.defer import inlineCallbacks as coroutine
 from autobahn.twisted.wamp import Session
-from autobahn.twisted.connection import Connection
+from autobahn.twisted.component import Component
 
 
 def make_session(config):
@@ -30,6 +30,6 @@ def make_session(config):
 
 if __name__ == '__main__':
 
-    session = make_session()
-    connection = Connection()
-    react(connection.start, [session])
+    component = Component(realm=u'crossbardemo')
+    component.session_factory = make_session
+    react(component.start)

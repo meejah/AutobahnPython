@@ -1,3 +1,6 @@
+# obsolete
+
+
 @coroutine
 def main(reactor, session):
     # the session is joined and ready
