@@ -2,7 +2,7 @@ from twisted.internet.defer import inlineCallbacks as coroutine
 from autobahn.twisted.util import sleep
 
 @coroutine
-def component1_setup(reactor, session):
+def component1_setup(session, details):
     # the session is joined and ready for use.
     def shutdown():
         print('backend component: shutting down ..')
@@ -41,12 +41,13 @@ def component2_main(reactor, session):
 
 if __name__ == '__main__':
     from twisted.internet.task import react
-    from autobahn.twisted.component import Component, Config, Transport, run
+    from autobahn.twisted.component import Component, run
 
     transports = [
         {
             'type': 'rawsocket',
             'serializer': 'msgpack',
+            'url': 'ws://127.0.0.1/ws',  # hmm, why need URL now for unix??
             'endpoint': {
                 'type': 'unix',
                 'path': '/tmp/cb1.sock'
@@ -63,18 +64,19 @@ if __name__ == '__main__':
         }
     ]
 
-    transports = TransportPool(transports)
+    comp1 = Component(
+        transports=transports,
+        realm=u'crossbardemo'
+    )
+    comp1.on('join', component1_setup)
 
     components = [
+        comp1,
         Component(
-            transports,
-            config=Config(realm=u'realm1'),
-            setup=component1_setup
-        ),
-        Component(
-            transports,
-            config=Config(realm=u'realm1', extra={'foo': 23}),
-            main=component2_main
+            transports=transports,
+            main=component2_main,
+            realm=u'crossbardemo',
+            extra={'foo': 23},
         )
     ]
 

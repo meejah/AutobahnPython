@@ -1,7 +1,7 @@
 from twisted.internet.task import react
 from twisted.internet.defer import inlineCallbacks as coroutine
 from autobahn.twisted.wamp import Session
-from autobahn.twisted.connection import Connection
+from autobahn.twisted.component import Component
 
 
 class MySession(Session):
@@ -22,7 +22,7 @@ class MySession(Session):
             print("error: {}".format(e))
         finally:
             print('leaving ..')
-            #self.leave()
+            self.leave()
 
 
     def on_leave(self, details):
@@ -37,6 +37,6 @@ if __name__ == '__main__':
 
     transports = u'ws://localhost:8080/ws'
 
-    connection = Connection(transports=transports)
-    connection.session = MySession
+    connection = Component(transports=transports, realm=u'crossbardemo')
+    connection.session_factory = MySession
     react(connection.start)

@@ -1,6 +1,11 @@
 
 # run multiple WAMP sessions over the same underlying WAMP transport
 
+
+# this could be accomplished with a session.split(), perhaps?
+# (maybe this and test_newapi8.py want to have something like
+#  session.get_transport() or so, sand levae transport.split()?)
+
 session1 = ApplicationSession()
 session2 = ApplicationSession()
 

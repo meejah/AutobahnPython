@@ -2,6 +2,11 @@ from twisted.internet.task import react
 from twisted.internet.defer import inlineCallbacks as coroutine
 from autobahn.twisted.wamp import Connection
 
+
+# i think this is just obsolete
+
+
+
 # A single session can freeze and resume over different transports
 
 # sessions have a lifecycle independent of Connection/Transport
