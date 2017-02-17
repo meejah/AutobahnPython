@@ -409,6 +409,37 @@ class Component(component.Component):
         self.on('ready', fn)
 
 
+    # XXX ... and possibly, we could do things like this, too:
+
+    # XXX instead of options=SubscribeOptions(...) what about we
+    # accept **kwargs here, and make an options. For example:
+    #
+    #    @subscribe(u'foo.bar', get_retained=True)
+    #    def bar(self):
+    #        return 'ohai'
+    #
+    # we could even hedge, and accept both .. i.e. if kwargs ==
+    # {"options": obj} then we grab it out...
+    def subscribe(self, topic, options=None):
+        """
+        A decorator as a shortcut for subscribing during on-join
+
+        For example::
+
+            @component.subscribe(u"some.topic", options=SubscribeOptions)
+            def topic(*args, **kw):
+                print("some.topic({}, {}): event received".format(args, kw))
+        """
+        assert options is None or isinstance(options, types.SubscribeOptions)
+
+        def decorator(fn):
+
+            def do_subscription(session, details):
+                return session.subscribe(fn, topic=topic, options=options)
+            self.on('join', do_subscription)
+        return decorator
+
+
 def _run(reactor, components):
     """
     Internal helper. Use "run" method.
