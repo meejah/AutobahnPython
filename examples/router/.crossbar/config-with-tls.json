@@ -28,6 +28,31 @@
                             ]
                         }
                     ]
+                },
+                {
+                    "name": "another_realm",
+                    "roles": [
+                        {
+                            "name": "anonymous",
+                            "permissions": [
+                                {
+                                    "uri": "",
+                                    "match": "prefix",
+                                    "allow": {
+                                        "call": true,
+                                        "register": true,
+                                        "publish": true,
+                                        "subscribe": true
+                                    },
+                                    "disclose": {
+                                        "caller": false,
+                                        "publisher": false
+                                    },
+                                    "cache": true
+                                }
+                            ]
+                        }
+                    ]
                 }
             ],
             "transports": [
@@ -89,6 +114,13 @@
                             "key": "server.key",
                             "certificate": "server.crt"
                         }
+                    }
+                },
+                {
+                    "type": "websocket",
+                    "endpoint": {
+                        "type": "unix",
+                        "path": "unix-websocket"
                     }
                 }
             ],
