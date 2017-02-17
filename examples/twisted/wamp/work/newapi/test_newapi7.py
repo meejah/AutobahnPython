@@ -1,35 +1,22 @@
 from twisted.internet.task import react
 from twisted.internet.defer import inlineCallbacks as coroutine
-from autobahn.twisted.wamp import Connection
+from autobahn.twisted.component import Component, run
 
 
-# this style is "mostly" broken. we put back the @session.on_*
-# stuff. Adding a "@component.register" would be straightforward as
-# well. But different style from this, so this example broken.
+component = Component(realm=u'crossbardemo')
 
+@component.on_join
+def on_join(session, details):
+    print("Session {} has joined: {}".format(details.session, details))
 
-session = ApplicationSession()
-
-@session.on_join
-def on_join(session):
-    print("Session {} has joined".format(session.id))
-
-@session.on_leave
+@component.on_leave
 def on_leave(session, details):
-    print("Session {} has left: {}".format(session.id, details.reason))
+    print("Session has left: {}".format(details))
 
-@session.register(u'com.myapp.add2')  # registering in on_join
+@component.register(u'com.myapp.add2')  # registering in on_join
 def add2(a, b):
     return a + b
 
-@coroutine
-def main(transport):
-    yield session.join(transport, u'myrealm1')
-    result = yield session.call(u'com.myapp.add2', 2, 3)
-    print("Result: {}".format(result))
-    yield session.leave()
-    yield transport.close()
-
-if __name__ == '__main__':
-    connection = Connection(main)
-    react(connection.start)
+@react
+def main(reactor):
+    return run(component)
