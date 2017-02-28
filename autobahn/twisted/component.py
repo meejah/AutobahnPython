@@ -382,7 +382,12 @@ class Component(component.Component):
         return self._session.leave()
 
 
-    # XXX some experimental APIs for decorator-based stuff
+    # XXX some experimental APIs for decorator-based lifecycle
+    # listeners (so e.g.  you do:
+    #
+    # @component.on_join
+    # def join(session, details):
+    #     print("Joined: {}".format(details))
 
     def on_join(self, fn):
         """
@@ -412,11 +417,15 @@ class Component(component.Component):
     # XXX ... and possibly, we could do things like this, too:
 
     # XXX instead of options=SubscribeOptions(...) what about we
-    # accept **kwargs here, and make an options. For example:
+    # accept **kwargs here, and make an options ourselves? For
+    # example:
     #
     #    @subscribe(u'foo.bar', get_retained=True)
     #    def bar(self):
     #        return 'ohai'
+    #
+    #  ...and the decorator below pass something like
+    #  "options=SubscribeOptions(**kw) if kw else None"
     #
     # we could even hedge, and accept both .. i.e. if kwargs ==
     # {"options": obj} then we grab it out...
@@ -437,6 +446,25 @@ class Component(component.Component):
             def do_subscription(session, details):
                 return session.subscribe(fn, topic=topic, options=options)
             self.on('join', do_subscription)
+        return decorator
+
+    def register(self, uri, options=None):
+        """
+        A decorator as a shortcut for registering during on-join
+
+        For example::
+
+            @component.register(u"com.example.add", options=RegisterOptions(invoke='round_robin'))
+            def add(*args, **kw):
+                print("add({}, {}): event received".format(args, kw))
+        """
+        assert options is None or isinstance(options, types.RegisterOptions)
+
+        def decorator(fn):
+
+            def do_registration(session, details):
+                return session.register(fn, procedure=uri, options=options)
+            self.on('join', do_registration)
         return decorator
 
 
