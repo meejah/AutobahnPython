@@ -56,7 +56,7 @@ from autobahn.twisted.rawsocket import WampRawSocketClientFactory
 from autobahn.wamp import component
 
 from autobahn.twisted.util import sleep
-from autobahn.twisted.wamp import ApplicationSession
+from autobahn.twisted.wamp import ApplicationSession, Session
 from autobahn.wamp.exception import ApplicationError
 
 
@@ -243,7 +243,7 @@ class Component(component.Component):
 
     log = txaio.make_logger()
 
-    session_factory = ApplicationSession
+    session_factory = Session
     """
     The factory of the session we will instantiate.
     """

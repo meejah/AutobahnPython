@@ -33,6 +33,7 @@ import txaio
 txaio.use_twisted()  # noqa
 
 from twisted.internet.defer import inlineCallbacks, succeed
+from zope.interface import Interface, implementer
 
 from autobahn.websocket.util import parse_url as parse_ws_url
 from autobahn.rawsocket.util import parse_url as parse_rs_url
@@ -54,7 +55,8 @@ __all__ = [
     'Service',
 
     # new API
-    'Session'
+    'Session',
+    'run', # should probably put this in here?
 ]
 
 try:
@@ -700,17 +702,95 @@ class Session(ApplicationSession):
     # ApplicationSession a subclass of Session -- and it can then be
     # separate deprecated and removed, ultimately, if desired.
 
+    #: name -> IAuthenticator
+    _authenticators = None
+
     def onJoin(self, details):
         return self.on_join(details)
 
-    # XXX def onChallenge(self, )
-    # XXX def onOpen ??
+    def onConnect(self):
+        # authid, authrole *must* match across all authenticators? (we
+        # check that already, and self self._authid)
+
+        # what about authextra?? merge all dicts?
+        if self._authenticators:
+            self.join(
+                self.config.realm,
+                authmethods=self._authenticators.keys(),
+                authid=self._authid or u'public',
+                authrole=self._authrole or u'default',
+                authextra=self._authextra or dict(),
+            )
+        else:
+            super(Session, self).onConnect()
+
+    def onChallenge(self, challenge):
+        try:
+            return self._authenticators[challenge.method].on_challenge(self, challenge)
+        except KeyError:
+            raise RuntimeError(
+                "Received onChallenge for unknown authmethod '{}'".format(
+                    challenge.method
+                )
+            )
 
     def onLeave(self, details):
         return self.on_leave(details)
 
     def onDisconnect(self):
         return self.on_disconnect()
+
+    # experimental authentication API
+
+    def add_authenticator(self, name, **kw):
+        if self._authenticators is None:
+            self._authenticators = {}
+            self._authid = None
+            self._authrole = None
+            self._authextra = {}
+        try:
+            auth = {
+                'cryptosign': AuthCryptoSign,
+            }[name](**kw)
+        except KeyError:
+            raise RuntimeError(
+                "Unknown authenticator '{}'".format(name)
+            )
+
+        if 'authid' in kw:
+            if self._authid is not None:
+                if kw['authid'] != self._authid:
+                    raise ValueError(
+                        "Inconsistent authids: '{}' vs '{}'".format(
+                            self._authid,
+                            kw['authid'],
+                        )
+                    )
+            self._authid = kw['authid']
+        if 'authrole' in kw:
+            if self._authrole is not None:
+                if kw['authrole'] != self._authrole:
+                    raise ValueError(
+                        "Inconsistent authroles: '{}' vs '{}'".format(
+                            self._authrole,
+                            kw['authrole'],
+                        )
+                    )
+            self._authrole = kw['authrole']
+
+        authextra = kw.get('authextra', {})
+        for k, v in authextra.items():
+            if k in self._authextra and self._authextra[k] != v:
+                raise ValueError(
+                    "Inconsistent authextra values for '{}': '{}' vs '{}'".format(
+                        k, v, self._authextra[k]
+                    )
+                )
+            self._authextra[k] = v
+        self._authenticators[name] = auth
+
+
+    # these are the actual "new API" methods (i.e. snake_case)
 
     def on_join(self, details):
         pass
@@ -720,3 +800,37 @@ class Session(ApplicationSession):
 
     def on_disconnect(self):
         pass
+
+
+# experimental authentication API
+class IAuthenticator(Interface):
+
+    def on_challenge(session, challenge):
+        """
+        """
+
+@implementer(IAuthenticator)
+class AuthCryptoSign(object):
+
+    def __init__(self, **kw):
+        # should put in checkconfig or similar
+        for key in kw.keys():
+            if key not in [u'authextra', u'realm', u'authid', u'authrole']:
+                raise ValueError(
+                    "Unexpected key '{}' for {}".format(key, self.__class__.__name__)
+                )
+        for key in kw.get('authextra', dict()):
+            if key not in [u'privkey', u'pubkey']:
+                raise ValueError(
+                    "Unexpected key '{}' in 'authextra'".format(key)
+                )
+        self._args = kw
+
+    def on_challenge(self, session, challenge):
+        to_sign = challenge.extra['challenge']
+        from autobahn.wamp.cryptosign import SigningKey
+        import binascii
+        key = SigningKey.from_key_bytes(
+            binascii.a2b_hex(self._args['authextra']['privkey'])
+        )
+        return key.sign_challenge(session, challenge)

@@ -48,8 +48,6 @@ if __name__ == '__main__':
     react(connection.start)
 
 
-    session = 
-
 
 #
 # Session
