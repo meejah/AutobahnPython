@@ -336,7 +336,8 @@ class Component(ObservableMixin):
     # XXX: could pass 'convenience' params, if you prefer not calling Component.on('join', ..)
     # on_join=None, on_leave=None, on_connect=None, on_disconnect=None):
     # XXX: or provide these via @component.on_join etc?
-    def __init__(self, main=None, transports=None, config=None, realm=u'default', extra=None):
+    # authentication=
+    def __init__(self, main=None, transports=None, config=None, realm=u'default', extra=None, authentication=None):
         """
         :param main: After a transport has been connected and a session
             has been established and joined to a realm, this (async)
@@ -366,6 +367,16 @@ class Component(ObservableMixin):
                       ``CertificateOptions`` instance.
 
         :type transports: None or unicode or list of dicts
+
+        :param authentication: a dict containing configuration for
+            authenticators mapping an authenticator type with its
+            config. Valid types are `cryptosign`, ...configuration
+            keys consist of the following:
+
+                - ``authextra``:
+                    - ``privkey`` (cryptosign): base32 encoded NaCl secret key
+
+        :type authentication: None or dict
 
         :param config: Session configuration (currently unused?)
         :type config: None or dict
@@ -421,6 +432,9 @@ class Component(ObservableMixin):
         self._realm = realm
         self._extra = extra
 
+        # XXX validate this
+        self._authentication_config = authentication or dict()
+
     def _can_reconnect(self):
         # check if any of our transport has any reconnect attempt left
         for transport in self._transports:
@@ -450,6 +464,9 @@ class Component(ObservableMixin):
             cfg = ComponentConfig(self._realm, self._extra)
             try:
                 session = self.session_factory(cfg)
+                for auth_name, auth_cfg in self._authentication_config.items():
+                    session.add_authenticator(auth_name, **auth_cfg)
+
             except Exception as e:
                 # couldn't instantiate session calls, which is fatal.
                 # let the reconnection logic deal with that
