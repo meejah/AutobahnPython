@@ -536,10 +536,11 @@ class Component(ObservableMixin):
 
         def on_connect_sucess(proto):
             # if e.g. an SSL handshake fails, we will have
-            # successfully connected (here) but need to listen for the
-            # "connectionLost" from the underlying protocol in case of
-            # handshake failure .. so we wrap it. Also, we don't
-            # increment transport.success_count here.
+            # successfully connected (i.e. get here) but need to
+            # 'listen' for the "connectionLost" from the underlying
+            # protocol in case of handshake failure .. so we wrap
+            # it. Also, we don't increment transport.success_count
+            # here on purpose (because we might not succeed).
             orig = proto.connectionLost
 
             @wraps(orig)
