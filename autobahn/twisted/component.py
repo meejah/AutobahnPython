@@ -56,7 +56,7 @@ from autobahn.twisted.rawsocket import WampRawSocketClientFactory
 from autobahn.wamp import component
 
 from autobahn.twisted.util import sleep
-from autobahn.twisted.wamp import ApplicationSession, Session
+from autobahn.twisted.wamp import Session
 from autobahn.wamp.exception import ApplicationError
 
 
@@ -381,7 +381,6 @@ class Component(component.Component):
     def stop(self):
         return self._session.leave()
 
-
     # XXX some experimental APIs for decorator-based lifecycle
     # listeners (so e.g.  you do:
     #
@@ -414,8 +413,7 @@ class Component(component.Component):
         self.on('ready', fn)
 
 
-    # XXX ... and possibly, we could do things like this, too:
-
+    # XXX another experimental (decorator-based) API
     # XXX instead of options=SubscribeOptions(...) what about we
     # accept **kwargs here, and make an options ourselves? For
     # example:

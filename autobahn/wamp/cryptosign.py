@@ -526,7 +526,7 @@ if HAS_CRYPTOSIGN:
             with open(filename, 'rb') as f:
                 keydata = f.read()
 
-            return from_key_bytes(keydata, comment=comment)
+            return cls.from_key_bytes(keydata, comment=comment)
 
         @classmethod
         def from_ssh_key(cls, filename):

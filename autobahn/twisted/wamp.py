@@ -28,6 +28,7 @@ from __future__ import absolute_import
 
 import six
 import inspect
+import binascii
 
 import txaio
 txaio.use_twisted()  # noqa
@@ -56,7 +57,7 @@ __all__ = [
 
     # new API
     'Session',
-    'run', # should probably put this in here?
+    'run',  # should probably put this in here?
 ]
 
 try:
@@ -789,8 +790,8 @@ class Session(ApplicationSession):
             self._authextra[k] = v
         self._authenticators[name] = auth
 
-
     # these are the actual "new API" methods (i.e. snake_case)
+    #
 
     def on_join(self, details):
         pass
@@ -808,6 +809,7 @@ class IAuthenticator(Interface):
     def on_challenge(session, challenge):
         """
         """
+
 
 @implementer(IAuthenticator)
 class AuthCryptoSign(object):
@@ -827,9 +829,7 @@ class AuthCryptoSign(object):
         self._args = kw
 
     def on_challenge(self, session, challenge):
-        to_sign = challenge.extra['challenge']
         from autobahn.wamp.cryptosign import SigningKey
-        import binascii
         key = SigningKey.from_key_bytes(
             binascii.a2b_hex(self._args['authextra']['privkey'])
         )
