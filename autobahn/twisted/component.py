@@ -53,7 +53,7 @@ import txaio
 from autobahn.twisted.websocket import WampWebSocketClientFactory
 from autobahn.twisted.rawsocket import WampRawSocketClientFactory
 
-from autobahn.wamp import component
+from autobahn.wamp import component, types
 
 from autobahn.twisted.util import sleep
 from autobahn.twisted.wamp import Session
@@ -411,7 +411,6 @@ class Component(component.Component):
 
     def on_ready(self, fn):
         self.on('ready', fn)
-
 
     # XXX another experimental (decorator-based) API
     # XXX instead of options=SubscribeOptions(...) what about we
