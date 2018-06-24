@@ -67,6 +67,23 @@ __all__ = (
 )
 
 
+def register_authenticator(name, klass):
+    """
+    (Experimental API). Allows extending the list of authenticators
+    that Session and Component understand.
+
+    Most users should not need this method. Advanced users prototyping
+    new WAMP authentication schemes may find this useful. API subject
+    to change.
+    """
+    global _authenticators
+    if name in _authenticators:
+        raise ValueError(
+            "Already have an authenticator '{}'".format(name)
+        )
+    _authenticators[name] = klass
+
+
 def create_authenticator(name, **kwargs):
     """
     Accepts various keys and values to configure an authenticator. The
@@ -76,14 +93,9 @@ def create_authenticator(name, **kwargs):
     :return: an instance implementing IAuthenticator with the given
         configuration.
     """
+    global _authenticators
     try:
-        klass = {
-            AuthScram.name: AuthScram,
-            AuthCryptoSign.name: AuthCryptoSign,
-            AuthWampCra.name: AuthWampCra,
-            AuthAnonymous.name: AuthAnonymous,
-            AuthTicket.name: AuthTicket,
-        }[name]
+        klass = _authenticators[name]
     except KeyError:
         raise ValueError(
             "Unknown authenticator '{}'".format(name)
@@ -626,3 +638,12 @@ def compute_wcs(key, challenge):
         challenge = challenge.encode('utf8')
     sig = hmac.new(key, challenge, hashlib.sha256).digest()
     return binascii.b2a_base64(sig).strip()
+
+
+_authenticators = {
+    AuthScram.name: AuthScram,
+    AuthCryptoSign.name: AuthCryptoSign,
+    AuthWampCra.name: AuthWampCra,
+    AuthAnonymous.name: AuthAnonymous,
+    AuthTicket.name: AuthTicket,
+}
