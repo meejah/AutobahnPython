@@ -1646,6 +1646,10 @@ class _SessionShim(ApplicationSession):
     #: name -> IAuthenticator
     _authenticators = None
 
+    @property
+    def session_id(self):
+        return self._session_id
+
     def onJoin(self, details):
         return self.on_join(details)
 
