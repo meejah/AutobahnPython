@@ -245,16 +245,19 @@ class WebSocketClientProtocol(WebSocketAdapterProtocol, protocol.WebSocketClient
         # ISSLTransport at that point according to Twisted
         # documentation
         # the peer we are connected to
+        secure = ISSLTransport.providedBy(self.transport)
         return TransportDetails(
             peer=self.peer,
-            is_secure=ISSLTransport.providedBy(self.transport),
-            secure_channel_id={
-                u"tls-unique": transport_channel_id(
-                    transport=self.transport,
-                    is_server=False,
-                    channel_id_type=u"tls-unique",
-                ),
-            }
+            is_secure=secure,
+            secure_channel_id=(
+                None if not secure else {
+                    u"tls-unique": transport_channel_id(
+                        transport=self.transport,
+                        is_server=False,
+                        channel_id_type=u"tls-unique",
+                    ),
+                }
+            )
         )
 
 

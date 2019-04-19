@@ -196,10 +196,11 @@ class WebSocketAdapterProtocol(asyncio.Protocol):
         Internal helper.
         Base class calls this to create a TransportDetails
         """
+        secure = self.transport.get_extra_info('peercert', None) is not None
         return TransportDetails(
             peer=peer2str(self.transport.get_extra_info('peername')),
-            is_secure=self.transport.get_extra_info('peercert', None) is not None,
-            secure_channel_id=transport_channel_id(self.transport, False, 'tls-unique'),
+            is_secure=secure,
+            secure_channel_id=None if not secure else transport_channel_id(self.transport, False, 'tls-unique'),
         )
 
     def registerProducer(self, producer, streaming):
