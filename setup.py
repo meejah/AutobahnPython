@@ -121,7 +121,7 @@ extras_require_xbr = [
 
     # the following is needed for XBR basics and XBR IDL code generation
     'cbor2>=5.2.0',             # MIT license
-    'zlmdb>=21.2.1',            # MIT license
+    'lmdb>=1.6.2',              # MIT license
     'twisted>=20.3.0',          # MIT license
 
     # ImportError: cannot import name 'getargspec' from 'inspect'
