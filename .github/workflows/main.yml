@@ -82,6 +82,13 @@ jobs:
           libsnappy-dev libcairo2-dev libgirepository-2.0-dev \
           build-essential python3-dev pypy3 liblmdb-dev libffi-dev
 
+    - name: Install LMDB from source
+      run: |
+        git clone https://github.com/LMDB/lmdb.git
+        cd lmdb/libraries/liblmdb
+        make
+        sudo make install
+
     # Use this Python
     # https://github.com/actions/setup-python/blob/main/README.md
     - name: Set up Python ${{ matrix.python-version }}
