@@ -23,7 +23,7 @@ async def test_echo_async():
 
 @pytest.mark.skipif(not os.environ.get('USE_ASYNCIO', False), reason='test runs on asyncio only')
 def test_websocket_custom_loop():
-    factory = WebSocketServerFactory(loop=asyncio.get_running_loop())
+    factory = WebSocketServerFactory(loop=asyncio.new_event_loop())
     server = factory()
     transport = Mock()
     server.connection_made(transport)
