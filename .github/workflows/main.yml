@@ -49,7 +49,7 @@ jobs:
       # WEB3_INFURA_API_SECRET: ${{ secrets.WEB3_INFURA_API_SECRET }}
 
       # for PyPy3.10 + LMDB
-      LMDB_PURE=1
+      LMDB_PURE: 1
 
     # Test on Ubuntu, MacOS, Windows using CPython and PyPy
     runs-on: ${{ matrix.os }}
