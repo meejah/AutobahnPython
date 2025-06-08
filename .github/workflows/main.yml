@@ -48,6 +48,8 @@ jobs:
       # WEB3_INFURA_PROJECT_ID: ${{ secrets.WEB3_INFURA_PROJECT_ID }}
       # WEB3_INFURA_API_SECRET: ${{ secrets.WEB3_INFURA_API_SECRET }}
 
+      LMDB_FORCE_SYSTEM: 1
+
     # Test on Ubuntu, MacOS, Windows using CPython and PyPy
     runs-on: ${{ matrix.os }}
     strategy:
