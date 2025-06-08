@@ -50,6 +50,7 @@ jobs:
 
       # for PyPy3.10 + LMDB
       LMDB_PURE: 1
+      LMDB_FORCE_SYSTEM: 1
 
     # Test on Ubuntu, MacOS, Windows using CPython and PyPy
     runs-on: ${{ matrix.os }}
